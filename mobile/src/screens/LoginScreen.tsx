@@ -106,9 +106,7 @@ const LoginScreen = ({ navigation }: any) => {
                 >
                     {/* Header */}
                     <View style={styles.header}>
-                        <View style={styles.iconContainer}>
-                            <Ionicons name="cube" size={32} color="#EF4444" />
-                        </View>
+                        <Image source={require('../../assets/circor-logo-3.png')} style={styles.logo} resizeMode="contain" />
                         <Text style={styles.welcomeText}>Welcome Back</Text>
                         <Text style={styles.subText}>Sign in to access your fleet dashboard</Text>
                     </View>
@@ -183,7 +181,7 @@ const LoginScreen = ({ navigation }: any) => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F9FAFB' },
+    container: { flex: 1, backgroundColor: '#fff' },
     loadingContainer: { flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' },
     keyboardView: { flex: 1, justifyContent: 'center' },
 
@@ -202,16 +200,11 @@ const styles = StyleSheet.create({
     content: { paddingHorizontal: 24, width: '100%', maxWidth: 400, alignSelf: 'center' },
 
     header: { marginBottom: 40 },
-    iconContainer: {
-        width: 56, height: 56, borderRadius: 16,
-        backgroundColor: '#fff',
-        justifyContent: 'center', alignItems: 'center',
-        marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
+    logo: {
+        width: 240, height: 90,
+        alignSelf: 'flex-start',
+        marginLeft: -16,
+        marginBottom: 10,
     },
     welcomeText: { fontSize: 28, fontWeight: '800', color: '#111827', marginBottom: 8 },
     subText: { fontSize: 15, color: '#6B7280', lineHeight: 22 },

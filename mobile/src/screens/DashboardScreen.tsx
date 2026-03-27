@@ -18,7 +18,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { getDriverJobs, updateStopStatus, reportBreakdown } from '../services/api';
+import { getDriverJobs, updateStopStatus, reportBreakdown, startTrip } from '../services/api';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -53,7 +53,9 @@ interface Stop {
 
 interface Job {
     jobId: string;
+    vehicleId: string;
     overall: JobOverall;
+    started: boolean;
     stops: Stop[];
     completedCount: number;
     totalCount: number;
@@ -88,20 +90,21 @@ const parseJobs = (rawJobs: any[]): Job[] => {
 
         const stops: Stop[] = [];
 
-        for (const idx of taskIds) {
-            const stopStatusStr = (typeof stopsMap[idx] === 'string')
-                ? stopsMap[idx]
-                : stopsMap[idx]?.state || 'pending';
-
-            const pickupCoords = pickupLoc[idx];
-            const dropCoords = dropLoc[idx];
-            const isPickup = pickupCoords && pickupCoords.lat !== 11.0 && pickupCoords.lng !== 77.0;
+         for (const idx of routeOrder) {
+            const stopsStatus = hasStopsWrapper ? statusObj.stops : statusObj; // Ensure stopsStatus is defined
+            const stopStatusStr = (typeof stopsStatus[idx] === 'string')
+                ? stopsStatus[idx]
+                : stopsStatus[idx]?.state || 'pending';
+            const loc = pickupLoc[idx];
+            
+            // Infer type: if lat=11.0 and lng=77.0, it's a 'drop' (back to depot).
+            const isPickup = loc && loc.lat !== 11.0 && loc.lng !== 77.0;
             const type: 'pickup' | 'drop' = isPickup ? 'pickup' : 'drop';
-            const loc = isPickup ? pickupCoords : dropCoords;
+            
             const lat = loc?.lat;
             const lng = loc?.lng;
             const customer = customerIds[idx] || '';
-            const locationName = loc?.location_name || loc?.address || '';
+            const locationName = loc?.location_name || customer; // Map heading prioritize location_name
             const name = locationName || String(customer) || (lat && lng ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : `Stop ${idx}`);
             const weight = weightObj[idx] || 0;
 
@@ -146,7 +149,9 @@ const parseJobs = (rawJobs: any[]): Job[] => {
 
         return {
             jobId: String(job.job_id),
+            vehicleId: String(job.assigned_vehicle_id || ''),
             overall: jobOverall,
+            started: !!(job.actual_start || (job.status && job.status.start_location)),
             stops,
             completedCount,
             totalCount: stops.length,
@@ -170,6 +175,7 @@ const DashboardScreen = ({ navigation }: any) => {
     const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
     const [breakdownJobId, setBreakdownJobId] = useState<string | null>(null);
+    const [startingJobId, setStartingJobId] = useState<string | null>(null);
     const [userName, setUserName] = useState('Driver');
 
     const scrollRef = useRef<ScrollView>(null);
@@ -243,8 +249,9 @@ const DashboardScreen = ({ navigation }: any) => {
                     overall: allDone ? 'completed' as JobOverall : j.overall,
                 };
             }));
-        } catch {
-            Alert.alert('Error', 'Failed to update status. Try again.');
+        } catch (error: any) {
+            const msg = error.response?.data?.error || error.message || 'Failed to complete stop.';
+            Alert.alert('Error', msg);
         } finally {
             setUpdatingId(null);
         }
@@ -287,6 +294,29 @@ const DashboardScreen = ({ navigation }: any) => {
 
     const handleSkip = (stop: Stop) => navigation.navigate('Reason', { stop });
 
+    const handleStartTrip = async (job: Job) => {
+        setStartingJobId(job.jobId);
+        try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Location Required', 'Please allow location access to start the trip.');
+                setStartingJobId(null);
+                return;
+            }
+            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+            await startTrip(job.jobId, loc.coords.latitude, loc.coords.longitude);
+            setJobs(prev => prev.map(j =>
+                j.jobId === job.jobId ? { ...j, started: true } : j
+            ));
+            Alert.alert('Trip Started', 'Your delivery has started. ETA has been updated.');
+        } catch (error: any) {
+            const msg = error.response?.data?.error || error.message || 'Failed to start trip. Try again.';
+            Alert.alert('Error', msg);
+        } finally {
+            setStartingJobId(null);
+        }
+    };
+
     const handleBreakdown = (job: Job) => {
         Alert.alert(
             'Vehicle Breakdown',
@@ -299,15 +329,23 @@ const DashboardScreen = ({ navigation }: any) => {
                     onPress: async () => {
                         setBreakdownJobId(job.jobId);
                         try {
-                            await reportBreakdown(job.jobId);
+                            const { status } = await Location.requestForegroundPermissionsAsync();
+                            let lat = 0, lng = 0;
+                            if (status === 'granted') {
+                                const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                                lat = loc.coords.latitude;
+                                lng = loc.coords.longitude;
+                            }
+                            await reportBreakdown(job.vehicleId, job.jobId, lat, lng);
                             setJobs(prev => prev.map(j =>
                                 j.jobId === job.jobId
                                     ? { ...j, overall: 'interrupted' as JobOverall }
                                     : j
                             ));
                             Alert.alert('Reported', 'Managers have been notified via email.');
-                        } catch {
-                            Alert.alert('Error', 'Failed to report. Try again.');
+                        } catch (error: any) {
+                            const msg = error.response?.data?.error || error.message || 'Failed to report breakdown.';
+                            Alert.alert('Error', msg);
                         } finally {
                             setBreakdownJobId(null);
                         }
@@ -408,6 +446,23 @@ const DashboardScreen = ({ navigation }: any) => {
                             {jobStatusText(job.overall)}  ·  {job.completedCount}/{job.totalCount} stops  ·  {pct}%
                         </Text>
                     </View>
+                    {job.overall === 'pending' && !job.started && (
+                        <TouchableOpacity
+                            style={st.startBtn}
+                            onPress={() => handleStartTrip(job)}
+                            activeOpacity={0.7}
+                            disabled={startingJobId === job.jobId}
+                        >
+                            {startingJobId === job.jobId ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <>
+                                    <Ionicons name="play" size={14} color="#fff" />
+                                    <Text style={st.startBtnText}>Start</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    )}
                     {job.overall === 'pending' && (
                         <TouchableOpacity style={st.jobMapBtn} onPress={() => openJobRoute(job)} activeOpacity={0.7}>
                             <Ionicons name="map-outline" size={16} color="#fff" />
@@ -596,6 +651,12 @@ const st = StyleSheet.create({
         borderRadius: 8, marginRight: 10,
     },
     jobMapBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+    startBtn: {
+        flexDirection: 'row', alignItems: 'center', gap: 4,
+        backgroundColor: '#16A34A', paddingHorizontal: 12, paddingVertical: 6,
+        borderRadius: 8, marginRight: 8,
+    },
+    startBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
     barTrack: { height: 2, backgroundColor: '#F5F5F7', marginHorizontal: 20 },
     barFill: { height: 2, backgroundColor: '#1D1D1F' },
 
