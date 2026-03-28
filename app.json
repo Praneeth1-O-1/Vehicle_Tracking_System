@@ -1,52 +1,60 @@
 {
-  "expo": {
-    "name": "Navix",
-    "slug": "navix-fleet",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/circor-logo-3.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/circor-logo-3.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.circor.fleet",
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
-    },
-    "android": {
-      "package": "com.circor.fleet",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/circor-logo-3.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "usesCleartextTraffic": true
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "bbbc7c00-1128-4bd2-b87a-4d6c9d0cd08e"
-      }
-    },
-    "plugins": [
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "usesCleartextTraffic": true
-          }
-        }
-      ],
-      "expo-audio"
-    ]
+"expo": {
+"name": "Navix",
+"slug": "navix-fleet",
+"version": "1.0.0",
+"orientation": "portrait",
+"icon": "./assets/circor-logo-3.png",
+"userInterfaceStyle": "light",
+"newArchEnabled": true,
+
+
+"splash": {
+  "image": "./assets/circor-logo-3.png",
+  "resizeMode": "contain",
+  "backgroundColor": "#ffffff"
+},
+
+"ios": {
+  "supportsTablet": true,
+  "bundleIdentifier": "com.circor.fleet",
+  "infoPlist": {
+    "ITSAppUsesNonExemptEncryption": false
   }
+},
+
+"android": {
+  "package": "com.circor.fleet",
+  "adaptiveIcon": {
+    "foregroundImage": "./assets/circor-logo-3.png",
+    "backgroundColor": "#ffffff"
+  },
+  "edgeToEdgeEnabled": true,
+  "predictiveBackGestureEnabled": false,
+  "usesCleartextTraffic": true
+},
+
+"web": {
+  "favicon": "./assets/favicon.png"
+},
+
+"plugins": [
+  [
+    "expo-build-properties",
+    {
+      "android": {
+        "usesCleartextTraffic": true
+      }
+    }
+  ]
+],
+
+"extra": {
+  "eas": {
+    "projectId": "269e93fa-0f1c-4962-8663-f4fde8e5c53a"
+  }
+}
+
+
+}
 }
