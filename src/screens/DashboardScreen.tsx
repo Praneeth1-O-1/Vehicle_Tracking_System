@@ -13,12 +13,14 @@ import {
     LayoutAnimation,
     Platform,
     UIManager,
+    Modal,
 } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { getDriverJobs, updateStopStatus, reportBreakdown, startTrip } from '../services/api';
+import { getDriverJobs, updateStopStatus, reportBreakdown, startTrip, uploadTaskExplanation } from '../services/api';
+import AudioRecorder from '../components/AudioRecorder';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -69,52 +71,40 @@ const TABS: { key: TabKey; label: string }[] = [
 ];
 
 // ─── Parse Backend Jobs → Job[] ──────────────────────────────
-const META_KEYS = new Set(['overall', 'state', 'reason']);
+// Backend getDriverJobs returns buildRouteResponse format:
+// { job_id, vehicle_id, route_order: [ { task_id, customer_id, location, location_name, task, weight, ... } ], status, ... }
 
 const parseJobs = (rawJobs: any[]): Job[] => {
     return rawJobs.map(job => {
         const statusObj = job.status || {};
-        const hasStopsWrapper = statusObj.stops && typeof statusObj.stops === 'object';
-        const stopsMap = hasStopsWrapper ? statusObj.stops : statusObj;
-        const jobOverall = (statusObj.overall || statusObj.state || 'pending') as JobOverall;
+        const stopsStatusMap = statusObj.stops || {};
+        const jobOverall = (statusObj.overall || 'pending') as JobOverall;
 
-        const pickupLoc = job.pickup_loc || job.pickup_location || {};
-        const dropLoc = job.drop_loc || job.drop_location || {};
-        const customerIds = job.customer_ids || {};
-        const weightObj = job.weight || {};
-        const routeOrder = job.routeorder || job.routeOrder || [];
+        // route_order is an array of task objects from buildRouteResponse
+        const routeOrder: any[] = job.route_order || [];
 
-        const taskIds = routeOrder.length > 0
-            ? routeOrder
-            : Object.keys(stopsMap).filter(k => !META_KEYS.has(k));
+        const stops: Stop[] = routeOrder.map((task: any, orderIndex: number) => {
+            const taskId = String(task.task_id);
 
-        const stops: Stop[] = [];
+            // Stop status from status.stops map
+            const stopStatusStr = (typeof stopsStatusMap[taskId] === 'string')
+                ? stopsStatusMap[taskId]
+                : stopsStatusMap[taskId]?.state || 'pending';
 
-         for (const idx of routeOrder) {
-            const stopsStatus = hasStopsWrapper ? statusObj.stops : statusObj; // Ensure stopsStatus is defined
-            const stopStatusStr = (typeof stopsStatus[idx] === 'string')
-                ? stopsStatus[idx]
-                : stopsStatus[idx]?.state || 'pending';
-            const loc = pickupLoc[idx];
-            
-            // Infer type: if lat=11.0 and lng=77.0, it's a 'drop' (back to depot).
-            const isPickup = loc && loc.lat !== 11.0 && loc.lng !== 77.0;
+            // Use the "task" field from backend to determine type (pickup/drop)
+            const taskType = (task.task || '').toLowerCase();
+            const isPickup = taskType === 'pickup';
             const type: 'pickup' | 'drop' = isPickup ? 'pickup' : 'drop';
-            
-            const lat = loc?.lat;
-            const lng = loc?.lng;
-            const customer = customerIds[idx] || '';
-            const locationName = loc?.location_name || customer; // Map heading prioritize location_name
-            const name = locationName || String(customer) || (lat && lng ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : `Stop ${idx}`);
-            const weight = weightObj[idx] || 0;
 
-            const etaObj = job.eta || {};
-            const eta = etaObj[idx] || '';
-            const stackingObj = job.stacking || {};
-            const cubicObj = job.cubic_cm || {};
-            const priorityObj = job.priority_based_on_order || {};
-            const timeObj = job.time_constraints || {};
-            const taskObj = job.task || {};
+            const lat = task.location?.lat ?? undefined;
+            const lng = task.location?.lng ?? undefined;
+            const customer = task.customer_id || '';
+            const locationName = task.location_name || customer;
+            const name = locationName || String(customer) || (lat && lng ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : `Stop ${taskId}`);
+            const weight = task.weight || 0;
+
+            // ETA — prefer dynamicEta, fallback to scheduledTime
+            const eta = task.dynamicEta || task.scheduledTime || '';
 
             let normalizedStatus: StopStatus = 'pending';
             if (stopStatusStr === 'completed') {
@@ -123,10 +113,10 @@ const parseJobs = (rawJobs: any[]): Job[] => {
                 normalizedStatus = 'skipped';
             }
 
-            stops.push({
-                id: `${job.job_id}-${idx}`,
+            return {
+                id: `${job.job_id}-${taskId}`,
                 jobId: String(job.job_id),
-                index: String(idx),
+                index: String(taskId),
                 name, type,
                 customer: String(customer),
                 weight: Number(weight),
@@ -135,23 +125,23 @@ const parseJobs = (rawJobs: any[]): Job[] => {
                 reason: jobOverall === 'interrupted' ? 'Job interrupted' : undefined,
                 lat, lng,
                 locationName,
-                address: loc?.address || '',
-                stacking: stackingObj[idx] ?? undefined,
-                cubicCm: cubicObj[idx] ?? undefined,
-                priority: priorityObj[idx] ?? undefined,
-                timeConstraint: timeObj[idx] ? String(timeObj[idx]) : undefined,
-                taskType: taskObj[idx] ? String(taskObj[idx]) : undefined,
-            });
-        }
+                address: '',
+                stacking: task.stacking ?? undefined,
+                cubicCm: task.cubic_cm ?? undefined,
+                priority: task.priority ?? undefined,
+                timeConstraint: task.time_limit ? String(task.time_limit) : undefined,
+                taskType: task.task ? String(task.task) : undefined,
+            };
+        });
 
-        stops.sort((a, b) => Number(a.index) - Number(b.index));
+        // Do NOT re-sort — preserve route_order sequence from backend
         const completedCount = stops.filter(s => s.status === 'delivered' || s.status === 'picked_up').length;
 
         return {
             jobId: String(job.job_id),
-            vehicleId: String(job.assigned_vehicle_id || ''),
+            vehicleId: String(job.vehicle_id || ''),
             overall: jobOverall,
-            started: !!(job.actual_start || (job.status && job.status.start_location)),
+            started: !!(job.actual_start || (statusObj.start_location)),
             stops,
             completedCount,
             totalCount: stops.length,
@@ -177,6 +167,8 @@ const DashboardScreen = ({ navigation }: any) => {
     const [breakdownJobId, setBreakdownJobId] = useState<string | null>(null);
     const [startingJobId, setStartingJobId] = useState<string | null>(null);
     const [userName, setUserName] = useState('Driver');
+    const [audioModalStop, setAudioModalStop] = useState<Stop | null>(null);
+    const [pendingLocation, setPendingLocation] = useState<{ lat: number; lng: number } | null>(null);
 
     const scrollRef = useRef<ScrollView>(null);
 
@@ -232,25 +224,80 @@ const DashboardScreen = ({ navigation }: any) => {
         setExpandedJobId(prev => prev === jobId ? null : jobId);
     };
 
+    // ─── Late threshold: 1 minute ────────────────────────
+    const LATE_THRESHOLD_MS = 1 * 60 * 1000;
+
+    const isTaskLate = (stop: Stop): boolean => {
+        if (!stop.eta) return false;
+        try {
+            const eta = new Date(stop.eta);
+            if (isNaN(eta.getTime())) return false;
+            return Date.now() > (eta.getTime() + LATE_THRESHOLD_MS);
+        } catch {
+            return false;
+        }
+    };
+
+    const finalizeCompletion = async (stop: Stop, lat: number, lng: number) => {
+        await updateStopStatus(stop.jobId, stop.index, 'completed', undefined, lat, lng);
+        const displayStatus: StopStatus = stop.type === 'pickup' ? 'picked_up' : 'delivered';
+        setJobs(prev => prev.map(j => {
+            if (j.jobId !== stop.jobId) return j;
+            const updatedStops = j.stops.map(s =>
+                s.id === stop.id ? { ...s, status: displayStatus } : s
+            );
+            const newCompleted = updatedStops.filter(s => s.status === 'delivered' || s.status === 'picked_up').length;
+            const allDone = newCompleted === j.totalCount;
+            return {
+                ...j, stops: updatedStops, completedCount: newCompleted,
+                overall: allDone ? 'completed' as JobOverall : j.overall,
+            };
+        }));
+    };
+
     const handleComplete = async (stop: Stop) => {
         setUpdatingId(stop.id);
         try {
-            await updateStopStatus(stop.jobId, stop.index, 'completed');
-            const displayStatus: StopStatus = stop.type === 'pickup' ? 'picked_up' : 'delivered';
-            setJobs(prev => prev.map(j => {
-                if (j.jobId !== stop.jobId) return j;
-                const updatedStops = j.stops.map(s =>
-                    s.id === stop.id ? { ...s, status: displayStatus } : s
-                );
-                const newCompleted = updatedStops.filter(s => s.status === 'delivered' || s.status === 'picked_up').length;
-                const allDone = newCompleted === j.totalCount;
-                return {
-                    ...j, stops: updatedStops, completedCount: newCompleted,
-                    overall: allDone ? 'completed' as JobOverall : j.overall,
-                };
-            }));
+            const { status: locStatus } = await Location.requestForegroundPermissionsAsync();
+            if (locStatus !== 'granted') {
+                Alert.alert('Location Required', 'Please allow location access to complete a task.');
+                setUpdatingId(null);
+                return;
+            }
+            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+            const { latitude, longitude } = loc.coords;
+
+            // Check if task is significantly late → require audio explanation
+            if (isTaskLate(stop)) {
+                setPendingLocation({ lat: latitude, lng: longitude });
+                setAudioModalStop(stop);
+                // Don't finalize yet — wait for audio recording
+                return;
+            }
+
+            await finalizeCompletion(stop, latitude, longitude);
         } catch (error: any) {
             const msg = error.response?.data?.error || error.message || 'Failed to complete stop.';
+            Alert.alert('Error', msg);
+        } finally {
+            setUpdatingId(null);
+        }
+    };
+
+    const handleLateAudioComplete = async (audioUri: string, durationSecs: number) => {
+        if (!audioModalStop || !pendingLocation) return;
+        try {
+            // 1. Upload the audio explanation
+            await uploadTaskExplanation(audioUri, audioModalStop.jobId, audioModalStop.index, durationSecs);
+
+            // 2. Finalize the task completion
+            await finalizeCompletion(audioModalStop, pendingLocation.lat, pendingLocation.lng);
+
+            setAudioModalStop(null);
+            setPendingLocation(null);
+            Alert.alert('Done', 'Task completed and audio explanation recorded.');
+        } catch (error: any) {
+            const msg = error.response?.data?.error || error.message || 'Failed to submit.';
             Alert.alert('Error', msg);
         } finally {
             setUpdatingId(null);
@@ -512,15 +559,50 @@ const DashboardScreen = ({ navigation }: any) => {
         <SafeAreaView style={st.container}>
             <StatusBar barStyle="dark-content" />
 
+            {/* Late Task Audio Modal */}
+            <Modal
+                visible={!!audioModalStop}
+                transparent
+                animationType="slide"
+                onRequestClose={() => {
+                    setAudioModalStop(null);
+                    setPendingLocation(null);
+                    setUpdatingId(null);
+                }}
+            >
+                <View style={st.modalOverlay}>
+                    <View style={st.modalContent}>
+                        <AudioRecorder
+                            title="Late Task — Explanation Required"
+                            subtitle={`You are completing task #${audioModalStop?.index} later than scheduled. Please record a brief audio explanation.`}
+                            onRecordingComplete={handleLateAudioComplete}
+                            onCancel={() => {
+                                setAudioModalStop(null);
+                                setPendingLocation(null);
+                                setUpdatingId(null);
+                            }}
+                        />
+                    </View>
+                </View>
+            </Modal>
+
             {/* Header */}
             <View style={st.header}>
                 <View>
                     <Text style={st.hi}>Hello,</Text>
                     <Text style={st.name}>{userName}</Text>
                 </View>
-                <TouchableOpacity onPress={handleLogout} style={st.logoutBtn}>
-                    <Ionicons name="log-out-outline" size={20} color="#1D1D1F" />
-                </TouchableOpacity>
+                <View style={st.headerRight}>
+                    <TouchableOpacity
+                        onPress={() => navigation.navigate('AudioMessages')}
+                        style={st.msgBtn}
+                    >
+                        <Ionicons name="chatbubble-ellipses-outline" size={20} color="#1D1D1F" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleLogout} style={st.logoutBtn}>
+                        <Ionicons name="log-out-outline" size={20} color="#1D1D1F" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {/* Progress summary — separate card */}
@@ -592,13 +674,28 @@ const DashboardScreen = ({ navigation }: any) => {
 const st = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
 
+    // Modal
+    modalOverlay: {
+        flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+        paddingBottom: 40,
+    },
+
     // Header
     header: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4,
     },
+    headerRight: { flexDirection: 'row', gap: 8 },
     hi: { fontSize: 14, color: '#86868B' },
     name: { fontSize: 26, fontWeight: '700', color: '#1D1D1F', marginTop: 2 },
+    msgBtn: {
+        width: 40, height: 40, borderRadius: 20,
+        backgroundColor: '#F5F5F7', alignItems: 'center', justifyContent: 'center',
+    },
     logoutBtn: {
         width: 40, height: 40, borderRadius: 20,
         backgroundColor: '#F5F5F7', alignItems: 'center', justifyContent: 'center',

@@ -20,6 +20,7 @@
     "babel-preset-expo": "^54.0.10",
     "clsx": "^2.1.1",
     "expo": "~54.0.33",
+    "expo-audio": "~1.1.1",
     "expo-av": "~16.0.8",
     "expo-blur": "~15.0.8",
     "expo-build-properties": "~1.0.10",

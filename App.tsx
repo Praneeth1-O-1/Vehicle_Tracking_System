@@ -7,6 +7,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
 import ReasonScreen from './src/screens/ReasonScreen';
 import TaskDetailScreen from './src/screens/TaskDetailScreen';
+import AudioMessagesScreen from './src/screens/AudioMessagesScreen';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
@@ -39,6 +40,7 @@ export default function App() {
             <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Reason" component={ReasonScreen} options={{ headerShown: false }} />
             <Stack.Screen name="TaskDetail" component={TaskDetailScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AudioMessages" component={AudioMessagesScreen} options={{ headerShown: false }} />
           </Stack.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>

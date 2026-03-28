@@ -24,7 +24,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 const { width, height } = Dimensions.get('window');
 
 const LoginScreen = ({ navigation }: any) => {
-    const [email, setEmail] = useState('');
+    const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(true);
 
@@ -70,12 +70,12 @@ const LoginScreen = ({ navigation }: any) => {
     });
 
     const handleLogin = () => {
-        if (!email || !password) {
+        if (!username || !password) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            return Alert.alert('Error', 'Please enter email and password');
+            return Alert.alert('Error', 'Please enter username and password');
         }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        loginMutation.mutate({ e: email, p: password });
+        loginMutation.mutate({ e: username, p: password });
     };
 
     if (loading) {
@@ -114,15 +114,14 @@ const LoginScreen = ({ navigation }: any) => {
                     {/* Form */}
                     <View style={styles.formContainer}>
                         <View style={styles.inputGroup}>
-                            <Ionicons name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+                            <Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
                             <TextInput
                                 style={styles.input}
-                                placeholder="Email Address"
+                                placeholder="Username"
                                 placeholderTextColor="#9CA3AF"
                                 autoCapitalize="none"
-                                keyboardType="email-address"
-                                value={email}
-                                onChangeText={setEmail}
+                                value={username}
+                                onChangeText={setUsername}
                             />
                         </View>
 

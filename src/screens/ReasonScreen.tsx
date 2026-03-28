@@ -9,6 +9,7 @@ import {
     ScrollView,
     ActivityIndicator,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { updateStopStatus } from '../services/api';
@@ -35,7 +36,17 @@ const ReasonScreen = ({ navigation, route }: any) => {
 
         setSubmitting(true);
         try {
-            await updateStopStatus(stop.jobId, stop.index, 'completed', selected);
+            // Capture driver's current location for proximity validation
+            const { status: locStatus } = await Location.requestForegroundPermissionsAsync();
+            if (locStatus !== 'granted') {
+                Alert.alert('Location Required', 'Please allow location access to complete a task.');
+                setSubmitting(false);
+                return;
+            }
+            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+            const { latitude, longitude } = loc.coords;
+
+            await updateStopStatus(stop.jobId, stop.index, 'completed', selected, latitude, longitude);
 
             Alert.alert('Submitted', `Reason recorded for ${stop?.name || 'stop'}.`, [
                 { text: 'OK', onPress: () => navigation.goBack() },

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "navix",
+    "name": "Navix",
     "slug": "navix-fleet",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -45,7 +45,8 @@
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "expo-audio"
     ]
   }
 }
