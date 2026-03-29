@@ -224,8 +224,8 @@ const DashboardScreen = ({ navigation }: any) => {
         setExpandedJobId(prev => prev === jobId ? null : jobId);
     };
 
-    // ─── Late threshold: 1 minute ────────────────────────
-    const LATE_THRESHOLD_MS = 1 * 60 * 1000;
+    // ─── Late threshold: 15 minutes ───────────────────────
+    const LATE_THRESHOLD_MS = 15 * 60 * 1000;
 
     const isTaskLate = (stop: Stop): boolean => {
         if (!stop.eta) return false;
@@ -266,6 +266,27 @@ const DashboardScreen = ({ navigation }: any) => {
             }
             const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
             const { latitude, longitude } = loc.coords;
+
+            // Check distance (200m)
+            if (stop.lat && stop.lng) {
+                const R = 6371e3; // metres
+                const rad = Math.PI / 180;
+                const dLat = (stop.lat - latitude) * rad;
+                const dLon = (stop.lng - longitude) * rad;
+                const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                          Math.cos(latitude * rad) * Math.cos(stop.lat * rad) *
+                          Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+                if (distance > 200) {
+                    Alert.alert(
+                        'Too Far From Location',
+                        `You must be within 200m of the stop to mark it as completed.\nCurrently: ${Math.round(distance)}m away.`
+                    );
+                    setUpdatingId(null);
+                    return;
+                }
+            }
 
             // Check if task is significantly late → require audio explanation
             if (isTaskLate(stop)) {
@@ -417,8 +438,9 @@ const DashboardScreen = ({ navigation }: any) => {
     };
 
     const filtered = filterJobs(activeTab);
-    const totalStops = jobs.reduce((sum, j) => sum + j.totalCount, 0);
-    const totalCompleted = jobs.reduce((sum, j) => sum + j.completedCount, 0);
+    const pendingJobs = jobs.filter(j => j.overall === 'pending');
+    const totalStops = pendingJobs.reduce((sum, j) => sum + j.totalCount, 0);
+    const totalCompleted = pendingJobs.reduce((sum, j) => sum + j.completedCount, 0);
     const progress = totalStops > 0 ? totalCompleted / totalStops : 0;
 
     // ─── Stop card ────────────────────────────────────
@@ -609,7 +631,7 @@ const DashboardScreen = ({ navigation }: any) => {
             <View style={st.progressBox}>
                 <View style={st.summaryCard}>
                     <View style={st.summaryLeft}>
-                        <Text style={st.summaryTitle}>Today's Progress</Text>
+                        <Text style={st.summaryTitle}>Pending Job Progress</Text>
                         <Text style={st.summaryCount}>
                             {totalCompleted}<Text style={st.summaryOf}> / {totalStops} stops</Text>
                         </Text>
