@@ -61,6 +61,8 @@ interface Job {
     stops: Stop[];
     completedCount: number;
     totalCount: number;
+    createdAt: string;
+    updatedAt: string;
 }
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -145,6 +147,8 @@ const parseJobs = (rawJobs: any[]): Job[] => {
             stops,
             completedCount,
             totalCount: stops.length,
+            createdAt: job.created_at || job.assigned_at || '',
+            updatedAt: job.updated_at || job.completed_at || '',
         };
     });
 };
@@ -153,6 +157,42 @@ const isDone = (s: StopStatus) => s === 'delivered' || s === 'picked_up' || s ==
 
 const jobStatusText = (o: JobOverall) =>
     o === 'completed' ? 'Completed' : o === 'interrupted' ? 'Interrupted' : 'In progress';
+
+const formatJobDate = (iso: string): string => {
+    if (!iso) return '';
+    try {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return '';
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        if (d.toDateString() === today.toDateString()) return `Today, ${timeStr}`;
+        if (d.toDateString() === yesterday.toDateString()) return `Yesterday, ${timeStr}`;
+        return d.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch { return ''; }
+};
+
+const getJobDateLabel = (job: Job): string => {
+    switch (job.overall) {
+        case 'completed': {
+            const d = formatJobDate(job.updatedAt);
+            return d ? `Completed ${d}` : '';
+        }
+        case 'interrupted': {
+            const d = formatJobDate(job.updatedAt);
+            return d ? `Interrupted ${d}` : '';
+        }
+        default: {
+            if (job.started) {
+                const d = formatJobDate(job.updatedAt || job.createdAt);
+                return d ? `Started ${d}` : '';
+            }
+            const d = formatJobDate(job.createdAt);
+            return d ? `Assigned ${d}` : '';
+        }
+    }
+};
 
 // ═══════════════════════════════════════════════════════
 // COMPONENT
@@ -410,7 +450,22 @@ const DashboardScreen = ({ navigation }: any) => {
                                     ? { ...j, overall: 'interrupted' as JobOverall }
                                     : j
                             ));
-                            Alert.alert('Reported', 'Managers have been notified via email.');
+                            Alert.alert(
+                                'Breakdown Reported',
+                                'Managers have been notified via email.\n\nPlease record a voice message to the manager who assigned this job explaining the situation.',
+                                [
+                                    { text: 'Later', style: 'cancel' },
+                                    {
+                                        text: 'Record Message',
+                                        onPress: () => {
+                                            navigation.navigate('AudioMessages', {
+                                                breakdownContext: true,
+                                                jobId: job.jobId,
+                                            });
+                                        },
+                                    },
+                                ]
+                            );
                         } catch (error: any) {
                             const msg = error.response?.data?.error || error.message || 'Failed to report breakdown.';
                             Alert.alert('Error', msg);
@@ -514,6 +569,12 @@ const DashboardScreen = ({ navigation }: any) => {
                         <Text style={st.jobSub}>
                             {jobStatusText(job.overall)}  ·  {job.completedCount}/{job.totalCount} stops  ·  {pct}%
                         </Text>
+                        {getJobDateLabel(job) !== '' && (
+                            <View style={st.jobDateRow}>
+                                <Ionicons name="calendar-outline" size={12} color="#AEAEB2" />
+                                <Text style={st.jobDate}>{getJobDateLabel(job)}</Text>
+                            </View>
+                        )}
                     </View>
                     {job.overall === 'pending' && !job.started && (
                         <TouchableOpacity
@@ -764,6 +825,8 @@ const st = StyleSheet.create({
     },
     jobTitle: { fontSize: 16, fontWeight: '600', color: '#1D1D1F' },
     jobSub: { fontSize: 13, color: '#86868B', marginTop: 2 },
+    jobDateRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+    jobDate: { fontSize: 12, color: '#AEAEB2', fontWeight: '500' },
     jobMapBtn: {
         flexDirection: 'row', alignItems: 'center', gap: 4,
         backgroundColor: '#007AFF', paddingHorizontal: 10, paddingVertical: 6,
