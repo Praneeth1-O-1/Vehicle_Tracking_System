@@ -1,13 +1,13 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
+import { Platform } from 'react-native'; 
 import Constants from 'expo-constants';
 
 // Remote server (uncomment to use production):
-const API_URL = 'http://51.20.128.131';
+//const API_URL = 'http://51.20.128.131';
 
 // Local backend — use your PC's LAN IP (not localhost) so the phone can reach it
-//const API_URL = 'http://10.63.55.139:5001';
+const API_URL = 'http://10.63.55.139:5001';
 
 const api = axios.create({
     baseURL: API_URL,
@@ -48,6 +48,17 @@ export const getDriverJobs = async () => {
 
     const jobs = response.data?.DATA;
     return Array.isArray(jobs) ? jobs : [];
+};
+
+// GET CUSTOMER PHONE NUMBER
+export const getCustomerPhone = async (customerId: string | number): Promise<string | null> => {
+    try {
+        const response = await api.get(`/api/customer/getCustomerById/${customerId}`);
+        const customer = response.data?.DATA;
+        return customer?.first_number || customer?.second_number || null;
+    } catch {
+        return null;
+    }
 };
 
 // UPDATE STOP STATUS (completed, pending, interrupted)

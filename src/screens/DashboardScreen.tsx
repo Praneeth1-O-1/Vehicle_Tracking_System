@@ -51,6 +51,7 @@ interface Stop {
     priority?: number;
     timeConstraint?: string;
     taskType?: string;
+    phone?: string;
 }
 
 interface Job {
@@ -86,6 +87,10 @@ const parseJobs = (rawJobs: any[]): Job[] => {
         const routeOrder: any[] = job.route_order || [];
 
         const stops: Stop[] = routeOrder.map((task: any, orderIndex: number) => {
+            // Debug: log raw task keys to find phone field
+            if (orderIndex === 0) console.log('[parseJobs] task keys:', Object.keys(task), 'customer_id:', task.customer_id);
+            console.log('FULL TASK:', task);
+
             const taskId = String(task.task_id);
 
             // Stop status from status.stops map
@@ -133,6 +138,7 @@ const parseJobs = (rawJobs: any[]): Job[] => {
                 priority: task.priority ?? undefined,
                 timeConstraint: task.time_limit ? String(task.time_limit) : undefined,
                 taskType: task.task ? String(task.task) : undefined,
+                phone: task.phone ? String(task.phone) : undefined,
             };
         });
 
@@ -402,6 +408,43 @@ const DashboardScreen = ({ navigation }: any) => {
 
     const handleSkip = (stop: Stop) => navigation.navigate('Reason', { stop });
 
+   const handleCall = async (stop: Stop) => {
+    let phone = stop.phone;
+
+    if (!phone) {
+        Alert.alert('No Phone Number', 'No contact number is available for this stop.');
+        return;
+    }
+
+    // Clean number
+    phone = phone.replace(/[^0-9]/g, '');
+
+    // Format for India
+    if (phone.startsWith('0')) {
+        phone = phone.substring(1);
+    }
+
+    if (phone.length === 10) {
+        phone = `+91${phone}`;
+    }
+
+    const url = `tel:${phone}`;
+    console.log("📞 TRYING:", url);
+
+    try {
+        // 🔥 DIRECTLY OPEN (skip canOpenURL)
+        await Linking.openURL(url);
+    } catch (err) {
+        console.log("❌ tel failed, trying telprompt");
+
+        try {
+            await Linking.openURL(`telprompt:${phone}`);
+        } catch (err2) {
+            Alert.alert('Error', 'Unable to open dialer on this device');
+        }
+    }
+};
+
     const handleStartTrip = async (job: Job) => {
         setStartingJobId(job.jobId);
         try {
@@ -535,21 +578,29 @@ const DashboardScreen = ({ navigation }: any) => {
                 )}
 
                 {!done && (
-                    <View style={st.btnRow}>
-                        <TouchableOpacity style={st.btnDone} onPress={() => handleComplete(stop)} disabled={loading}>
-                            {loading
-                                ? <ActivityIndicator size="small" color="#fff" />
-                                : <><Ionicons name="checkmark" size={16} color="#fff" /><Text style={st.btnDoneText}>Done</Text></>
-                            }
-                        </TouchableOpacity>
-                        <TouchableOpacity style={st.btnOutline} onPress={() => openNavigation(stop)}>
-                            <Ionicons name="navigate-outline" size={15} color="#1D1D1F" />
-                            <Text style={st.btnOutlineText}>Map</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={st.btnOutline} onPress={() => handleSkip(stop)}>
-                            <Ionicons name="flag-outline" size={15} color="#1D1D1F" />
-                            <Text style={st.btnOutlineText}>Reason</Text>
-                        </TouchableOpacity>
+                    <View style={st.btnSection}>
+                        <View style={st.btnRow}>
+                            <TouchableOpacity style={st.btnDone} onPress={() => handleComplete(stop)} disabled={loading}>
+                                {loading
+                                    ? <ActivityIndicator size="small" color="#fff" />
+                                    : <><Ionicons name="checkmark" size={16} color="#fff" /><Text style={st.btnDoneText}>Done</Text></>
+                                }
+                            </TouchableOpacity>
+                            <TouchableOpacity style={st.btnCall} onPress={() => handleCall(stop)}>
+                                <Ionicons name="call" size={15} color="#fff" />
+                                <Text style={st.btnCallText}>Call</Text>
+                            </TouchableOpacity>
+                        </View>
+                        <View style={st.btnRow}>
+                            <TouchableOpacity style={st.btnOutline} onPress={() => openNavigation(stop)}>
+                                <Ionicons name="navigate-outline" size={15} color="#1D1D1F" />
+                                <Text style={st.btnOutlineText}>Map</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={st.btnOutline} onPress={() => handleSkip(stop)}>
+                                <Ionicons name="flag-outline" size={15} color="#1D1D1F" />
+                                <Text style={st.btnOutlineText}>Reason</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 )}
             </View>
@@ -871,18 +922,24 @@ const st = StyleSheet.create({
     stopReason: { fontSize: 12, color: '#FF3B30', marginTop: 4, paddingLeft: 28 },
 
     // Buttons
-    btnRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+    btnSection: { marginTop: 12, gap: 8 },
+    btnRow: { flexDirection: 'row', gap: 8 },
     btnDone: {
-        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
-        backgroundColor: '#1D1D1F', paddingVertical: 10, borderRadius: 8,
+        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+        backgroundColor: '#1D1D1F', paddingVertical: 11, borderRadius: 10,
     },
-    btnDoneText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+    btnDoneText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+    btnCall: {
+        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+        backgroundColor: '#16A34A', paddingVertical: 11, borderRadius: 10,
+    },
+    btnCallText: { color: '#fff', fontSize: 14, fontWeight: '600' },
     btnOutline: {
-        flexDirection: 'row', alignItems: 'center', gap: 4,
-        paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8,
+        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+        paddingVertical: 11, borderRadius: 10,
         borderWidth: 1, borderColor: '#E5E5EA',
     },
-    btnOutlineText: { fontSize: 12, fontWeight: '500', color: '#1D1D1F' },
+    btnOutlineText: { fontSize: 13, fontWeight: '500', color: '#1D1D1F' },
 
     // Loading & empty
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
