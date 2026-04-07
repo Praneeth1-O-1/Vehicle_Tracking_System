@@ -7,7 +7,7 @@ import Constants from 'expo-constants';
 //const API_URL = 'http://51.20.128.131';
 
 // Local backend — use your PC's LAN IP (not localhost) so the phone can reach it
-const API_URL = 'http://10.63.55.139:5001';
+const API_URL = 'http://10.66.209.18:5000';
 
 const api = axios.create({
     baseURL: API_URL,
@@ -185,6 +185,50 @@ export const getUnreadCount = async () => {
 export const getMessagableUsers = async () => {
     const response = await api.get('/api/audio/users');
     return response.data?.DATA || [];
+};
+
+// ─── TASK WORKFLOW API ─────────────────────────────────────
+
+// REJECT TASK (permanent)
+export const rejectTask = async (
+    job_id: string | number,
+    task_id: string,
+    remarks: {
+        text?: string;
+        predefined_reason?: string;
+        audio_message_id?: string | number;
+    }
+) => {
+    const response = await api.put('/api/jobs/status', {
+        job_id,
+        task_id,
+        status: 'rejected',
+        remarks: {
+            text: remarks.text || null,
+            predefined_reason: remarks.predefined_reason || null,
+            audio_message_id: remarks.audio_message_id || null,
+        },
+    });
+    return response.data;
+};
+
+// ADD TASK REMARK
+export const addTaskRemark = async (
+    job_id: string | number,
+    task_id: string,
+    remarkData: {
+        type?: string;
+        text?: string;
+        predefined_reason?: string;
+        audio_message_id?: string | number;
+    }
+) => {
+    const response = await api.post('/api/jobs/remark', {
+        job_id,
+        task_id,
+        ...remarkData,
+    });
+    return response.data;
 };
 
 export default api;

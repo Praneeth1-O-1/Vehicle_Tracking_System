@@ -19,7 +19,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { getDriverJobs, updateStopStatus, reportBreakdown, startTrip, uploadTaskExplanation } from '../services/api';
+import { getDriverJobs, updateStopStatus, reportBreakdown, startTrip, uploadTaskExplanation, rejectTask, addTaskRemark } from '../services/api';
 import AudioRecorder from '../components/AudioRecorder';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -27,7 +27,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 // ─── Types ───────────────────────────────────────────────────
-type StopStatus = 'pending' | 'completed' | 'delivered' | 'picked_up' | 'skipped';
+type StopStatus = 'pending' | 'completed' | 'delivered' | 'picked_up' | 'skipped' | 'location_changed_pending' | 'location_changed_completed' | 'rejected';
 type JobOverall = 'pending' | 'completed' | 'interrupted';
 type TabKey = 'pending' | 'all' | 'interrupted' | 'completed';
 
@@ -116,6 +116,12 @@ const parseJobs = (rawJobs: any[]): Job[] => {
             let normalizedStatus: StopStatus = 'pending';
             if (stopStatusStr === 'completed') {
                 normalizedStatus = isPickup ? 'picked_up' : 'delivered';
+            } else if (stopStatusStr === 'location_changed_pending') {
+                normalizedStatus = 'location_changed_pending';
+            } else if (stopStatusStr === 'location_changed_completed') {
+                normalizedStatus = 'location_changed_completed';
+            } else if (stopStatusStr === 'rejected') {
+                normalizedStatus = 'rejected';
             } else if (jobOverall === 'interrupted' && stopStatusStr !== 'completed') {
                 normalizedStatus = 'skipped';
             }
@@ -132,13 +138,13 @@ const parseJobs = (rawJobs: any[]): Job[] => {
                 reason: jobOverall === 'interrupted' ? 'Job interrupted' : undefined,
                 lat, lng,
                 locationName,
+                phone: task.phone ? String(task.phone) : undefined,
                 address: '',
                 stacking: task.stacking ?? undefined,
                 cubicCm: task.cubic_cm ?? undefined,
                 priority: task.priority ?? undefined,
                 timeConstraint: task.time_limit ? String(task.time_limit) : undefined,
                 taskType: task.task ? String(task.task) : undefined,
-                phone: task.phone ? String(task.phone) : undefined,
             };
         });
 
@@ -159,7 +165,7 @@ const parseJobs = (rawJobs: any[]): Job[] => {
     });
 };
 
-const isDone = (s: StopStatus) => s === 'delivered' || s === 'picked_up' || s === 'skipped';
+const isDone = (s: StopStatus) => s === 'delivered' || s === 'picked_up' || s === 'skipped' || s === 'location_changed_completed' || s === 'rejected';
 
 const jobStatusText = (o: JobOverall) =>
     o === 'completed' ? 'Completed' : o === 'interrupted' ? 'Interrupted' : 'In progress';
@@ -270,8 +276,8 @@ const DashboardScreen = ({ navigation }: any) => {
         setExpandedJobId(prev => prev === jobId ? null : jobId);
     };
 
-    // ─── Late threshold: 15 minutes ───────────────────────
-    const LATE_THRESHOLD_MS = 15 * 60 * 1000;
+    // ─── Late threshold: 1 minutes ───────────────────────
+    const LATE_THRESHOLD_MS = 1 * 60 * 1000;
 
     const isTaskLate = (stop: Stop): boolean => {
         if (!stop.eta) return false;
@@ -285,8 +291,11 @@ const DashboardScreen = ({ navigation }: any) => {
     };
 
     const finalizeCompletion = async (stop: Stop, lat: number, lng: number) => {
-        await updateStopStatus(stop.jobId, stop.index, 'completed', undefined, lat, lng);
-        const displayStatus: StopStatus = stop.type === 'pickup' ? 'picked_up' : 'delivered';
+        const statusToSend = (stop as any)._useLocationChangedStatus ? 'location_changed_completed' : 'completed';
+        await updateStopStatus(stop.jobId, stop.index, statusToSend, undefined, lat, lng);
+        const displayStatus: StopStatus = (stop as any)._useLocationChangedStatus
+            ? 'location_changed_completed'
+            : (stop.type === 'pickup' ? 'picked_up' : 'delivered');
         setJobs(prev => prev.map(j => {
             if (j.jobId !== stop.jobId) return j;
             const updatedStops = j.stops.map(s =>
@@ -313,26 +322,9 @@ const DashboardScreen = ({ navigation }: any) => {
             const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
             const { latitude, longitude } = loc.coords;
 
-            // Check distance (200m)
-            if (stop.lat && stop.lng) {
-                const R = 6371e3; // metres
-                const rad = Math.PI / 180;
-                const dLat = (stop.lat - latitude) * rad;
-                const dLon = (stop.lng - longitude) * rad;
-                const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                          Math.cos(latitude * rad) * Math.cos(stop.lat * rad) *
-                          Math.sin(dLon / 2) * Math.sin(dLon / 2);
-                const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-                if (distance > 200) {
-                    Alert.alert(
-                        'Too Far From Location',
-                        `You must be within 200m of the stop to mark it as completed.\nCurrently: ${Math.round(distance)}m away.`
-                    );
-                    setUpdatingId(null);
-                    return;
-                }
-            }
+            // Distance constraint has been removed.
+            // Drivers can now complete tasks from any location.
+            // Coordinates are still recorded for tracking purposes.
 
             // Check if task is significantly late → require audio explanation
             if (isTaskLate(stop)) {
@@ -355,7 +347,16 @@ const DashboardScreen = ({ navigation }: any) => {
         if (!audioModalStop || !pendingLocation) return;
         try {
             // 1. Upload the audio explanation
-            await uploadTaskExplanation(audioUri, audioModalStop.jobId, audioModalStop.index, durationSecs);
+            const res = await uploadTaskExplanation(audioUri, audioModalStop.jobId, audioModalStop.index, durationSecs);
+            const uploadedMessageId = res?.DATA?.id;
+
+            if (uploadedMessageId) {
+                await addTaskRemark(audioModalStop.jobId, audioModalStop.index, {
+                    type: 'delay',
+                    text: 'Delayed Arrival',
+                    audio_message_id: uploadedMessageId
+                });
+            }
 
             // 2. Finalize the task completion
             await finalizeCompletion(audioModalStop, pendingLocation.lat, pendingLocation.lng);
@@ -545,15 +546,35 @@ const DashboardScreen = ({ navigation }: any) => {
     const renderStop = (stop: Stop) => {
         const done = isDone(stop.status);
         const loading = updatingId === stop.id;
+        const isLocationChanged = stop.status === 'location_changed_pending';
+        const isRejected = stop.status === 'rejected';
 
         return (
-            <View key={stop.id} style={[st.stopCard, done && st.stopDone]}>
+            <View key={stop.id} style={[
+                st.stopCard,
+                done && st.stopDone,
+                isLocationChanged && { borderLeftWidth: 3, borderLeftColor: '#F59E0B', backgroundColor: '#FEF3C7' },
+                isRejected && { borderLeftWidth: 3, borderLeftColor: '#EF4444' },
+            ]}>
+
+                {/* Rejected Badge */}
+                {isRejected && (
+                    <View style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 4,
+                        backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 4,
+                        borderRadius: 6, marginBottom: 8, alignSelf: 'flex-start',
+                    }}>
+                        <Ionicons name="close-circle" size={12} color="#DC2626" />
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#DC2626' }}>Rejected (Permanent)</Text>
+                    </View>
+                )}
+
                 <View style={st.stopTop}>
                     <View style={st.stopInfo}>
                         <Ionicons
                             name={stop.type === 'pickup' ? 'arrow-up-circle-outline' : 'arrow-down-circle-outline'}
                             size={18}
-                            color={done ? '#AEAEB2' : '#1D1D1F'}
+                            color={done ? '#AEAEB2' : isLocationChanged ? '#D97706' : '#1D1D1F'}
                         />
                         <View style={{ flex: 1 }}>
                             <Text style={[st.stopLabel, done && st.stopLabelDone]}>
@@ -566,7 +587,8 @@ const DashboardScreen = ({ navigation }: any) => {
                             </TouchableOpacity>
                         </View>
                     </View>
-                    {done && <Ionicons name="checkmark-circle" size={22} color="#AEAEB2" />}
+                    {done && !isRejected && <Ionicons name="checkmark-circle" size={22} color="#AEAEB2" />}
+                    {isRejected && <Ionicons name="close-circle" size={22} color="#EF4444" />}
                 </View>
 
                 {stop.weight > 0 && (
@@ -580,7 +602,18 @@ const DashboardScreen = ({ navigation }: any) => {
                 {!done && (
                     <View style={st.btnSection}>
                         <View style={st.btnRow}>
-                            <TouchableOpacity style={st.btnDone} onPress={() => handleComplete(stop)} disabled={loading}>
+                            <TouchableOpacity
+                                style={st.btnDone}
+                                onPress={() => {
+                                    if (isLocationChanged) {
+                                        // For location-changed tasks, use location_changed_completed status
+                                        handleComplete({ ...stop, _useLocationChangedStatus: true } as any);
+                                    } else {
+                                        handleComplete(stop);
+                                    }
+                                }}
+                                disabled={loading}
+                            >
                                 {loading
                                     ? <ActivityIndicator size="small" color="#fff" />
                                     : <><Ionicons name="checkmark" size={16} color="#fff" /><Text style={st.btnDoneText}>Done</Text></>
@@ -599,6 +632,13 @@ const DashboardScreen = ({ navigation }: any) => {
                             <TouchableOpacity style={st.btnOutline} onPress={() => handleSkip(stop)}>
                                 <Ionicons name="flag-outline" size={15} color="#1D1D1F" />
                                 <Text style={st.btnOutlineText}>Reason</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[st.btnOutline, { borderColor: '#FCA5A5' }]}
+                                onPress={() => navigation.navigate('RejectTask', { stop })}
+                            >
+                                <Ionicons name="trash-outline" size={15} color="#EF4444" />
+                                <Text style={[st.btnOutlineText, { color: '#EF4444' }]}>Reject</Text>
                             </TouchableOpacity>
                         </View>
                     </View>

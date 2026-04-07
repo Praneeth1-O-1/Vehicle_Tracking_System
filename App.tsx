@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import LoginScreen from './src/screens/LoginScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
 import ReasonScreen from './src/screens/ReasonScreen';
+import RejectTaskScreen from './src/screens/RejectTaskScreen';
 import TaskDetailScreen from './src/screens/TaskDetailScreen';
 import AudioMessagesScreen from './src/screens/AudioMessagesScreen';
 
@@ -39,6 +40,7 @@ export default function App() {
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Reason" component={ReasonScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="RejectTask" component={RejectTaskScreen} options={{ headerShown: false }} />
             <Stack.Screen name="TaskDetail" component={TaskDetailScreen} options={{ headerShown: false }} />
             <Stack.Screen name="AudioMessages" component={AudioMessagesScreen} options={{ headerShown: false }} />
           </Stack.Navigator>
