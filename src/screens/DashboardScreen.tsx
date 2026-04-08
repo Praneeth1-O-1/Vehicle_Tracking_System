@@ -310,37 +310,51 @@ const DashboardScreen = ({ navigation }: any) => {
         }));
     };
 
-    const handleComplete = async (stop: Stop) => {
-        setUpdatingId(stop.id);
-        try {
-            const { status: locStatus } = await Location.requestForegroundPermissionsAsync();
-            if (locStatus !== 'granted') {
-                Alert.alert('Location Required', 'Please allow location access to complete a task.');
-                setUpdatingId(null);
-                return;
-            }
-            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-            const { latitude, longitude } = loc.coords;
+    const handleComplete = (stop: Stop) => {
+        Alert.alert(
+            'Confirm Completion',
+            `Are you sure you want to mark this task as done?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Yes, Done',
+                    style: 'default',
+                    onPress: async () => {
+                        setUpdatingId(stop.id);
+                        try {
+                            let latitude = 0;
+                            let longitude = 0;
 
-            // Distance constraint has been removed.
-            // Drivers can now complete tasks from any location.
-            // Coordinates are still recorded for tracking purposes.
+                            try {
+                                const { status: locStatus } = await Location.getForegroundPermissionsAsync();
+                                if (locStatus === 'granted') {
+                                    const loc = await Location.getLastKnownPositionAsync() || await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                                    if (loc) {
+                                        latitude = loc.coords.latitude;
+                                        longitude = loc.coords.longitude;
+                                    }
+                                }
+                            } catch (e) {
+                                // proceed even if location fetching fails
+                            }
 
-            // Check if task is significantly late → require audio explanation
-            if (isTaskLate(stop)) {
-                setPendingLocation({ lat: latitude, lng: longitude });
-                setAudioModalStop(stop);
-                // Don't finalize yet — wait for audio recording
-                return;
-            }
+                            if (isTaskLate(stop)) {
+                                setPendingLocation({ lat: latitude, lng: longitude });
+                                setAudioModalStop(stop);
+                                return;
+                            }
 
-            await finalizeCompletion(stop, latitude, longitude);
-        } catch (error: any) {
-            const msg = error.response?.data?.error || error.message || 'Failed to complete stop.';
-            Alert.alert('Error', msg);
-        } finally {
-            setUpdatingId(null);
-        }
+                            await finalizeCompletion(stop, latitude, longitude);
+                        } catch (error: any) {
+                            const msg = error.response?.data?.error || error.message || 'Failed to complete stop.';
+                            Alert.alert('Error', msg);
+                        } finally {
+                            setUpdatingId(null);
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const handleLateAudioComplete = async (audioUri: string, durationSecs: number) => {

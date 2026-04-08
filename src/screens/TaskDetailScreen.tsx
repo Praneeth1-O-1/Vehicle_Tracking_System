@@ -97,7 +97,7 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 {/* Details grid */}
                 <Text style={s.sectionTitle}>Task Information</Text>
                 <View style={s.detailsCard}>
-                    <DetailRow icon="person-outline" label="Customer ID" value={stop.customer || '—'} />
+                    <DetailRow icon="location-outline" label="Customer Location" value={stop.locationName || stop.customer || '—'} />
                     <DetailRow icon="cube-outline" label="Weight" value={stop.weight ? `${stop.weight} kg` : '—'} />
                     <DetailRow icon="time-outline" label="ETA" value={stop.eta || '—'} />
                     <DetailRow icon="layers-outline" label="Stacking" value={stop.stacking != null ? String(stop.stacking) : '—'} />

@@ -4,10 +4,10 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 // Remote server (uncomment to use production):
-//const API_URL = 'http://51.20.128.131';
+const API_URL = 'http://51.20.128.131';
 
 // Local backend — use your PC's LAN IP (not localhost) so the phone can reach it
-const API_URL = 'http://10.66.209.18:5000';
+//const API_URL = 'http://10.160.240.198:5001';
 
 const api = axios.create({
     baseURL: API_URL,
