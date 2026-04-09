@@ -106,8 +106,9 @@ const parseJobs = (rawJobs: any[]): Job[] => {
             const lat = task.location?.lat ?? undefined;
             const lng = task.location?.lng ?? undefined;
             const customer = task.customer_id || '';
+            const customerName = task.customer_name || '';
             const locationName = task.location_name || customer;
-            const name = locationName || String(customer) || (lat && lng ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : `Stop ${taskId}`);
+            const name = customerName || locationName || String(customer) || (lat && lng ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : `Stop ${taskId}`);
             const weight = task.weight || 0;
 
             // ETA — prefer dynamicEta, fallback to scheduledTime
@@ -239,6 +240,14 @@ const DashboardScreen = ({ navigation }: any) => {
             const raw = await getDriverJobs();
             const parsed = parseJobs(raw);
             setJobs(parsed);
+
+            // Auto-expand the first active job
+            if (!expandedJobId) {
+                const activeJob = parsed.find(j => j.started && j.overall === 'pending');
+                if (activeJob) {
+                    setExpandedJobId(activeJob.jobId);
+                }
+            }
         } catch (err: any) {
             console.error('Failed to fetch jobs:', err);
             if (err?.response?.status === 401) {
@@ -474,6 +483,10 @@ const DashboardScreen = ({ navigation }: any) => {
             setJobs(prev => prev.map(j =>
                 j.jobId === job.jobId ? { ...j, started: true } : j
             ));
+            
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setExpandedJobId(job.jobId);
+            
             Alert.alert('Trip Started', 'Your delivery has started. ETA has been updated.');
         } catch (error: any) {
             const msg = error.response?.data?.error || error.message || 'Failed to start trip. Try again.';
