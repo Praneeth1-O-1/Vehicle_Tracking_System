@@ -14,17 +14,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { rejectTask, uploadTaskExplanation } from '../services/api';
 import AudioRecorder from '../components/AudioRecorder';
+import { useTranslation } from '../i18n/i18n';
 
-const REJECTION_REASONS = [
-    { id: 'customer_unavailable', icon: 'person-outline' as const, label: 'Customer unavailable' },
-    { id: 'wrong_address', icon: 'navigate-outline' as const, label: 'Wrong / invalid address' },
-    { id: 'unsafe_location', icon: 'shield-outline' as const, label: 'Unsafe location' },
-    { id: 'access_denied', icon: 'lock-closed-outline' as const, label: 'Access denied' },
-    { id: 'damaged_goods', icon: 'cube-outline' as const, label: 'Damaged / missing goods' },
-    { id: 'other', icon: 'ellipsis-horizontal-outline' as const, label: 'Other' },
+const REJECTION_REASON_KEYS = [
+    { id: 'customer_unavailable', icon: 'person-outline' as const, labelKey: 'rejectTask.customerUnavailable' },
+    { id: 'wrong_address', icon: 'navigate-outline' as const, labelKey: 'rejectTask.wrongAddress' },
+    { id: 'other', icon: 'ellipsis-horizontal-outline' as const, labelKey: 'rejectTask.other' },
 ];
 
 const RejectTaskScreen = ({ navigation, route }: any) => {
+    const { t } = useTranslation();
     const { stop } = route.params || {};
     const [selected, setSelected] = useState<string | null>(null);
     const [notes, setNotes] = useState('');
@@ -33,17 +32,17 @@ const RejectTaskScreen = ({ navigation, route }: any) => {
 
     const submit = async () => {
         if (!selected) {
-            Alert.alert('Select a Reason', 'Please select a reason for rejecting this task.');
+            Alert.alert(t('rejectTask.selectReason'), t('rejectTask.selectReasonMsg'));
             return;
         }
 
         Alert.alert(
-            'Confirm Rejection',
-            'This action is permanent and cannot be undone. Are you sure you want to reject this task?',
+            t('rejectTask.confirmRejection'),
+            t('rejectTask.confirmRejectionMsg'),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('rejectTask.cancel'), style: 'cancel' },
                 {
-                    text: 'Yes, Reject',
+                    text: t('rejectTask.yesReject'),
                     style: 'destructive',
                     onPress: async () => {
                         setSubmitting(true);
@@ -67,13 +66,13 @@ const RejectTaskScreen = ({ navigation, route }: any) => {
                             });
 
                             Alert.alert(
-                                'Task Rejected',
-                                `Task "${stop?.name || 'Unknown'}" has been permanently rejected.`,
-                                [{ text: 'OK', onPress: () => navigation.goBack() }]
+                                t('rejectTask.taskRejected'),
+                                t('rejectTask.taskRejectedMsg', { name: stop?.name || 'Unknown' }),
+                                [{ text: t('common.ok'), onPress: () => navigation.goBack() }]
                             );
                         } catch (err: any) {
                             const msg = err?.response?.data?.error || err.message || 'Failed to reject task.';
-                            Alert.alert('Error', msg);
+                            Alert.alert(t('common.error'), msg);
                         } finally {
                             setSubmitting(false);
                         }
@@ -91,20 +90,20 @@ const RejectTaskScreen = ({ navigation, route }: any) => {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
                     <Ionicons name="chevron-back" size={20} color="#1E293B" />
                 </TouchableOpacity>
-                <Text style={s.headerTitle}>Reject Task</Text>
+                <Text style={s.headerTitle}>{t('rejectTask.headerTitle')}</Text>
                 <View style={{ width: 36 }} />
             </View>
 
             <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Task info */}
                 <View style={s.stopInfo}>
-                    <Text style={s.stopLabel}>Stop #{stop?.index || '?'}</Text>
+                    <Text style={s.stopLabel}>{t('reason.stop')} #{stop?.index || '?'}</Text>
                     <Text style={s.stopName}>{stop?.name || 'Unknown'}</Text>
                     <Text style={[
                         s.stopType,
                         stop?.type === 'pickup' ? { color: '#16A34A' } : { color: '#EA580C' },
                     ]}>
-                        {stop?.type === 'pickup' ? '↑ Pickup' : '↓ Drop-off'}
+                        {stop?.type === 'pickup' ? t('reason.pickupArrow') : t('reason.dropOffArrow')}
                     </Text>
                 </View>
 
@@ -112,12 +111,12 @@ const RejectTaskScreen = ({ navigation, route }: any) => {
                 <View style={s.warningBanner}>
                     <Ionicons name="warning-outline" size={16} color="#DC2626" />
                     <Text style={s.warningText}>
-                        This rejection is permanent and cannot be reversed.
+                        {t('rejectTask.warningText')}
                     </Text>
                 </View>
 
-                <Text style={s.sectionLabel}>Reason for rejection</Text>
-                {REJECTION_REASONS.map((r) => {
+                <Text style={s.sectionLabel}>{t('rejectTask.reasonForRejection')}</Text>
+                {REJECTION_REASON_KEYS.map((r) => {
                     const active = selected === r.id;
                     return (
                         <TouchableOpacity
@@ -129,7 +128,7 @@ const RejectTaskScreen = ({ navigation, route }: any) => {
                             <View style={[s.reasonIcon, active && s.reasonIconActive]}>
                                 <Ionicons name={r.icon} size={18} color={active ? '#fff' : '#64748B'} />
                             </View>
-                            <Text style={[s.reasonText, active && s.reasonTextActive]}>{r.label}</Text>
+                            <Text style={[s.reasonText, active && s.reasonTextActive]}>{t(r.labelKey)}</Text>
                             <View style={[s.radio, active && s.radioActive]}>
                                 {active && <View style={s.radioDot} />}
                             </View>
@@ -138,10 +137,10 @@ const RejectTaskScreen = ({ navigation, route }: any) => {
                 })}
 
                 {/* Optional notes */}
-                <Text style={[s.sectionLabel, { marginTop: 16 }]}>Additional notes (optional)</Text>
+                <Text style={[s.sectionLabel, { marginTop: 16 }]}>{t('rejectTask.additionalNotes')}</Text>
                 <TextInput
                     style={s.notesInput}
-                    placeholder="Describe the situation..."
+                    placeholder={t('rejectTask.describeTheSituation')}
                     placeholderTextColor="#94A3B8"
                     multiline
                     numberOfLines={3}
@@ -150,11 +149,11 @@ const RejectTaskScreen = ({ navigation, route }: any) => {
                     textAlignVertical="top"
                 />
 
-                <Text style={s.sectionLabel}>Voice Note (optional)</Text>
+                <Text style={s.sectionLabel}>{t('rejectTask.voiceNote')}</Text>
                 {audioData ? (
                     <View style={s.audioAttachedBox}>
                         <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
-                        <Text style={s.audioAttachedText}>Audio explanation attached ({audioData.durationSecs}s)</Text>
+                        <Text style={s.audioAttachedText}>{t('rejectTask.audioAttached')} ({audioData.durationSecs}s)</Text>
                         <TouchableOpacity onPress={() => setAudioData(null)} style={{ marginLeft: 'auto' }}>
                             <Ionicons name="close-circle" size={20} color="#94A3B8" />
                         </TouchableOpacity>
@@ -162,8 +161,8 @@ const RejectTaskScreen = ({ navigation, route }: any) => {
                 ) : (
                     <AudioRecorder
                         onRecordingComplete={(uri, durationSecs) => setAudioData({ uri, durationSecs })}
-                        title="Record a reason"
-                        subtitle="Explain why this task is being permanently rejected"
+                        title={t('rejectTask.recordAReason')}
+                        subtitle={t('rejectTask.recordSubtitle')}
                     />
                 )}
 
@@ -178,7 +177,7 @@ const RejectTaskScreen = ({ navigation, route }: any) => {
                     ) : (
                         <>
                             <Ionicons name="trash-outline" size={16} color="#fff" />
-                            <Text style={s.submitText}>  Reject Task</Text>
+                            <Text style={s.submitText}>  {t('rejectTask.rejectTaskBtn')}</Text>
                         </>
                     )}
                 </TouchableOpacity>

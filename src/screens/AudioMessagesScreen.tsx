@@ -12,6 +12,7 @@ import {
     sendAudioMessage, getAudioStreamUrl,
 } from '../services/api';
 import AudioRecorder from '../components/AudioRecorder';
+import { useTranslation } from '../i18n/i18n';
 
 // ─── Types ───────────────────────────────────────────────
 interface Conversation {
@@ -43,6 +44,7 @@ interface User {
 type ScreenMode = 'list' | 'chat' | 'contacts';
 
 const AudioMessagesScreen = ({ navigation, route }: any) => {
+    const { t } = useTranslation();
     const breakdownContext = route?.params?.breakdownContext || false;
     const breakdownJobId = route?.params?.jobId || null;
 
@@ -187,7 +189,7 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
             });
         } catch (err) {
             console.error('Playback error:', err);
-            Alert.alert('Error', 'Failed to play audio');
+            Alert.alert(t('common.error'), t('audioMessages.errorPlayback'));
             setPlayingId(null);
         }
     };
@@ -201,8 +203,8 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
             const data = await getConversationMessages(selectedPartner.id);
             setMessages(data);
         } catch (err: any) {
-            const msg = err.response?.data?.error || err.message || 'Failed to send';
-            Alert.alert('Error', msg);
+            const msg = err.response?.data?.error || err.message || t('audioMessages.errorSend');
+            Alert.alert(t('common.error'), msg);
         }
     };
 
@@ -251,7 +253,7 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
                     <Ionicons name="chevron-back" size={20} color="#1D1D1F" />
                 </TouchableOpacity>
                 <Text style={s.headerTitle}>
-                    {mode === 'list' ? 'Messages' : mode === 'contacts' ? 'New Message' : selectedPartner?.name || 'Chat'}
+                    {mode === 'list' ? t('audioMessages.messages') : mode === 'contacts' ? t('audioMessages.newMessage') : selectedPartner?.name || t('audioMessages.chat')}
                 </Text>
                 {mode === 'list' ? (
                     <TouchableOpacity onPress={openContacts} style={s.newBtn}>
@@ -267,7 +269,7 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
                 <View style={s.breakdownBanner}>
                     <Ionicons name="warning" size={18} color="#FF9500" />
                     <Text style={s.breakdownBannerText}>
-                        Select the manager who assigned Job #{breakdownJobId} to record a breakdown explanation.
+                        {t('audioMessages.breakdownBanner', { jobId: String(breakdownJobId) })}
                     </Text>
                 </View>
             )}
@@ -288,8 +290,8 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
                     {conversations.length === 0 ? (
                         <View style={s.empty}>
                             <Ionicons name="chatbubbles-outline" size={48} color="#D2D2D7" />
-                            <Text style={s.emptyTitle}>No conversations yet</Text>
-                            <Text style={s.emptyBody}>Tap + to start a new message</Text>
+                            <Text style={s.emptyTitle}>{t('audioMessages.noConversations')}</Text>
+                            <Text style={s.emptyBody}>{t('audioMessages.tapToStart')}</Text>
                         </View>
                     ) : (
                         conversations.map((conv) => (
@@ -330,7 +332,7 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
                 <ScrollView style={s.list} contentContainerStyle={s.listPad}>
                     {contacts.length === 0 ? (
                         <View style={s.empty}>
-                            <Text style={s.emptyTitle}>No contacts available</Text>
+                            <Text style={s.emptyTitle}>{t('audioMessages.noContacts')}</Text>
                         </View>
                     ) : (
                         contacts.map((user) => (
@@ -364,8 +366,8 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
                         {messages.length === 0 ? (
                             <View style={s.empty}>
                                 <Ionicons name="mic-outline" size={40} color="#D2D2D7" />
-                                <Text style={s.emptyTitle}>No messages yet</Text>
-                                <Text style={s.emptyBody}>Send a voice message below</Text>
+                                <Text style={s.emptyTitle}>{t('audioMessages.noMessages')}</Text>
+                                <Text style={s.emptyBody}>{t('audioMessages.sendVoiceBelow')}</Text>
                             </View>
                         ) : (
                             messages.map((msg) => {
@@ -418,7 +420,7 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
                     {showRecorder ? (
                         <View style={s.recorderContainer}>
                             <AudioRecorder
-                                title="Record Message"
+                                title={t('audioMessages.recordMessage')}
                                 onRecordingComplete={handleSendMessage}
                                 onCancel={() => setShowRecorder(false)}
                             />
@@ -430,7 +432,7 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
                             activeOpacity={0.8}
                         >
                             <Ionicons name="mic" size={22} color="#fff" />
-                            <Text style={s.recordBarText}>Hold or tap to record</Text>
+                            <Text style={s.recordBarText}>{t('audioMessages.holdOrTap')}</Text>
                         </TouchableOpacity>
                     )}
                 </View>

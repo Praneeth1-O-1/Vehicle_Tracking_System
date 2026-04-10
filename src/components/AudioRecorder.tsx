@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from '../i18n/i18n';
 
 interface AudioRecorderProps {
     onRecordingComplete: (uri: string, durationSecs: number) => void;
@@ -21,6 +22,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
     title = 'Record Audio',
     subtitle,
 }) => {
+    const { t } = useTranslation();
     const [isRecording, setIsRecording] = useState(false);
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [recordedUri, setRecordedUri] = useState<string | null>(null);
@@ -72,7 +74,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
             // 1. Request permission
             const perm = await Audio.requestPermissionsAsync();
             if (!perm.granted) {
-                alert('Microphone permission is required to record audio.');
+                alert(t('audioRecorder.micPermission'));
                 return;
             }
 
@@ -110,7 +112,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
                 try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
                 recordingRef.current = null;
             }
-            alert('Could not start recording. Please try again.');
+            alert(t('audioRecorder.couldNotStart'));
         }
     };
 
@@ -217,18 +219,18 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
                         <>
                             <Animated.View style={[styles.pulseRing, { transform: [{ scale: pulseAnim }] }]} />
                             <Text style={styles.timer}>{formatTime(recordingDuration)}</Text>
-                            <Text style={styles.recordingLabel}>Recording...</Text>
+                            <Text style={styles.recordingLabel}>{t('audioRecorder.recording')}</Text>
                             <TouchableOpacity style={styles.stopBtn} onPress={stopRecording}>
                                 <Ionicons name="stop" size={28} color="#fff" />
                             </TouchableOpacity>
-                            <Text style={styles.hint}>Tap to stop</Text>
+                            <Text style={styles.hint}>{t('audioRecorder.tapToStop')}</Text>
                         </>
                     ) : (
                         <>
                             <TouchableOpacity style={styles.recordBtn} onPress={startRecording}>
                                 <Ionicons name="mic" size={32} color="#fff" />
                             </TouchableOpacity>
-                            <Text style={styles.hint}>Tap to record</Text>
+                            <Text style={styles.hint}>{t('audioRecorder.tapToRecord')}</Text>
                         </>
                     )}
                 </View>
@@ -264,7 +266,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
                     <View style={styles.actionRow}>
                         <TouchableOpacity style={styles.reRecordBtn} onPress={reRecord}>
                             <Ionicons name="refresh" size={18} color="#FF3B30" />
-                            <Text style={styles.reRecordText}>Re-record</Text>
+                            <Text style={styles.reRecordText}>{t('audioRecorder.reRecord')}</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
@@ -277,7 +279,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
                             ) : (
                                 <>
                                     <Ionicons name="send" size={16} color="#fff" />
-                                    <Text style={styles.sendText}>Send</Text>
+                                    <Text style={styles.sendText}>{t('audioRecorder.send')}</Text>
                                 </>
                             )}
                         </TouchableOpacity>
@@ -287,7 +289,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
             {onCancel && (
                 <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
-                    <Text style={styles.cancelText}>Cancel</Text>
+                    <Text style={styles.cancelText}>{t('audioRecorder.cancel')}</Text>
                 </TouchableOpacity>
             )}
         </View>

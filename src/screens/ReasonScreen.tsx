@@ -13,24 +13,26 @@ import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { updateStopStatus } from '../services/api';
+import { useTranslation } from '../i18n/i18n';
 
-const REASONS = [
-    { id: 'customer_unavailable', icon: 'person-outline' as const, label: 'Customer unavailable' },
-    { id: 'wrong_address', icon: 'navigate-outline' as const, label: 'Wrong address' },
-    { id: 'vehicle_issue', icon: 'construct-outline' as const, label: 'Vehicle issue' },
-    { id: 'traffic_weather', icon: 'rainy-outline' as const, label: 'Traffic / weather delay' },
+const REASON_KEYS = [
+    { id: 'customer_unavailable', icon: 'person-outline' as const, labelKey: 'reason.customerUnavailable' },
+    { id: 'wrong_address', icon: 'navigate-outline' as const, labelKey: 'reason.wrongAddress' },
+    { id: 'vehicle_issue', icon: 'construct-outline' as const, labelKey: 'reason.vehicleIssue' },
+    { id: 'traffic_weather', icon: 'rainy-outline' as const, labelKey: 'reason.trafficWeather' },
 ];
 
 const ReasonScreen = ({ navigation, route }: any) => {
+    const { t } = useTranslation();
     const { stop } = route.params || {};
     const [selected, setSelected] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
-    const title = stop?.type === 'pickup' ? 'Can\'t Pick Up' : 'Can\'t Drop Off';
+    const title = stop?.type === 'pickup' ? t('reason.cantPickUp') : t('reason.cantDropOff');
 
     const submit = async () => {
         if (!selected) {
-            Alert.alert('Select a Reason', 'Please select a reason.');
+            Alert.alert(t('reason.selectReason'), t('reason.selectReasonMsg'));
             return;
         }
 
@@ -39,7 +41,7 @@ const ReasonScreen = ({ navigation, route }: any) => {
             // Capture driver's current location for proximity validation
             const { status: locStatus } = await Location.requestForegroundPermissionsAsync();
             if (locStatus !== 'granted') {
-                Alert.alert('Location Required', 'Please allow location access to complete a task.');
+                Alert.alert(t('reason.locationRequired'), t('reason.locationRequiredMsg'));
                 setSubmitting(false);
                 return;
             }
@@ -48,11 +50,11 @@ const ReasonScreen = ({ navigation, route }: any) => {
 
             await updateStopStatus(stop.jobId, stop.index, 'completed', selected, latitude, longitude);
 
-            Alert.alert('Submitted', `Reason recorded for ${stop?.name || 'stop'}.`, [
-                { text: 'OK', onPress: () => navigation.goBack() },
+            Alert.alert(t('reason.submitted'), t('reason.submittedMsg', { name: stop?.name || 'stop' }), [
+                { text: t('common.ok'), onPress: () => navigation.goBack() },
             ]);
         } catch (err) {
-            Alert.alert('Error', 'Failed to submit reason. Please try again.');
+            Alert.alert(t('common.error'), t('reason.errorSubmit'));
         } finally {
             setSubmitting(false);
         }
@@ -72,18 +74,18 @@ const ReasonScreen = ({ navigation, route }: any) => {
 
             <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
                 <View style={s.stopInfo}>
-                    <Text style={s.stopLabel}>Stop #{stop?.index || '?'}</Text>
-                    <Text style={s.stopName}>{stop?.name || 'Unknown'}</Text>
+                    <Text style={s.stopLabel}>{t('reason.stop')} #{stop?.index || '?'}</Text>
+                    <Text style={s.stopName}>{stop?.name || t('reason.unknown')}</Text>
                     <Text style={[
                         s.stopType,
                         stop?.type === 'pickup' ? { color: '#16A34A' } : { color: '#EA580C' },
                     ]}>
-                        {stop?.type === 'pickup' ? '↑ Pickup' : '↓ Drop-off'}
+                        {stop?.type === 'pickup' ? t('reason.pickupArrow') : t('reason.dropOffArrow')}
                     </Text>
                 </View>
 
-                <Text style={s.sectionLabel}>What happened?</Text>
-                {REASONS.map((r) => {
+                <Text style={s.sectionLabel}>{t('reason.whatHappened')}</Text>
+                {REASON_KEYS.map((r) => {
                     const active = selected === r.id;
                     return (
                         <TouchableOpacity
@@ -95,7 +97,7 @@ const ReasonScreen = ({ navigation, route }: any) => {
                             <View style={[s.reasonIcon, active && s.reasonIconActive]}>
                                 <Ionicons name={r.icon} size={18} color={active ? '#fff' : '#64748B'} />
                             </View>
-                            <Text style={[s.reasonText, active && s.reasonTextActive]}>{r.label}</Text>
+                            <Text style={[s.reasonText, active && s.reasonTextActive]}>{t(r.labelKey)}</Text>
                             <View style={[s.radio, active && s.radioActive]}>
                                 {active && <View style={s.radioDot} />}
                             </View>
@@ -112,7 +114,7 @@ const ReasonScreen = ({ navigation, route }: any) => {
                     {submitting ? (
                         <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                        <Text style={s.submitText}>Submit</Text>
+                        <Text style={s.submitText}>{t('reason.submit')}</Text>
                     )}
                 </TouchableOpacity>
             </ScrollView>

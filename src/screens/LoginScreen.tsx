@@ -12,7 +12,9 @@ import {
     Animated,
     StatusBar,
     Image,
-    Dimensions
+    Dimensions,
+    Modal,
+    FlatList,
 } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 import { login } from '../services/api';
@@ -20,13 +22,16 @@ import * as SecureStore from 'expo-secure-store';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation, LANGUAGES, LanguageCode } from '../i18n/i18n';
 
 const { width, height } = Dimensions.get('window');
 
 const LoginScreen = ({ navigation }: any) => {
+    const { t, language, setLanguage } = useTranslation();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(true);
+    const [langDropdownVisible, setLangDropdownVisible] = useState(false);
 
     // Animations
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -65,17 +70,23 @@ const LoginScreen = ({ navigation }: any) => {
         },
         onError: (error: any) => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            Alert.alert('Login Failed', error.response?.data?.MESSAGE || error.message || 'Something went wrong');
+            Alert.alert(t('login.loginFailed'), error.response?.data?.MESSAGE || error.message || 'Something went wrong');
         },
     });
 
     const handleLogin = () => {
         if (!username || !password) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            return Alert.alert('Error', 'Please enter username and password');
+            return Alert.alert(t('login.error'), t('login.enterCredentials'));
         }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         loginMutation.mutate({ e: username, p: password });
+    };
+
+    const handleLanguageSelect = (code: LanguageCode) => {
+        setLanguage(code);
+        setLangDropdownVisible(false);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     };
 
     if (loading) {
@@ -94,6 +105,50 @@ const LoginScreen = ({ navigation }: any) => {
             {/* Background Decor */}
             <View style={styles.backgroundCircle} />
 
+            {/* Language Dropdown Modal */}
+            <Modal
+                visible={langDropdownVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setLangDropdownVisible(false)}
+            >
+                <TouchableOpacity
+                    style={styles.langModalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setLangDropdownVisible(false)}
+                >
+                    <View style={styles.langDropdown}>
+                        <View style={styles.langDropdownHeader}>
+                            <View style={styles.langIconSmall}>
+                                <Text style={styles.langIconA}>A</Text>
+                                <Text style={styles.langIconZh}>文</Text>
+                            </View>
+                            <Text style={styles.langDropdownTitle}>
+                                {language === 'en' ? 'Select Language' : language === 'ta' ? 'மொழியை தேர்ந்தெடுக்கவும்' : 'भाषा चुनें'}
+                            </Text>
+                        </View>
+                        {LANGUAGES.map((lang) => {
+                            const isActive = language === lang.code;
+                            return (
+                                <TouchableOpacity
+                                    key={lang.code}
+                                    style={[styles.langOption, isActive && styles.langOptionActive]}
+                                    onPress={() => handleLanguageSelect(lang.code)}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={[styles.langLabel, isActive && styles.langLabelActive]}>
+                                        {lang.label}
+                                    </Text>
+                                    {isActive && (
+                                        <Ionicons name="checkmark-circle" size={20} color="#EF4444" />
+                                    )}
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.keyboardView}
@@ -107,8 +162,8 @@ const LoginScreen = ({ navigation }: any) => {
                     {/* Header */}
                     <View style={styles.header}>
                         <Image source={require('../../assets/circor-logo-3.png')} style={styles.logo} resizeMode="contain" />
-                        <Text style={styles.welcomeText}>Welcome Back</Text>
-                        <Text style={styles.subText}>Sign in to access your fleet dashboard</Text>
+                        <Text style={styles.welcomeText}>{t('login.welcomeBack')}</Text>
+                        <Text style={styles.subText}>{t('login.subtitle')}</Text>
                     </View>
 
                     {/* Form */}
@@ -117,7 +172,7 @@ const LoginScreen = ({ navigation }: any) => {
                             <Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
                             <TextInput
                                 style={styles.input}
-                                placeholder="Username"
+                                placeholder={t('login.username')}
                                 placeholderTextColor="#9CA3AF"
                                 autoCapitalize="none"
                                 value={username}
@@ -129,7 +184,7 @@ const LoginScreen = ({ navigation }: any) => {
                             <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
                             <TextInput
                                 style={styles.input}
-                                placeholder="Password"
+                                placeholder={t('login.password')}
                                 placeholderTextColor="#9CA3AF"
                                 secureTextEntry
                                 value={password}
@@ -137,13 +192,34 @@ const LoginScreen = ({ navigation }: any) => {
                             />
                         </View>
 
-                        <TouchableOpacity
-                            style={styles.forgotBtn}
-                            activeOpacity={0.7}
-                            onPress={() => Alert.alert('Reset Password', 'Please contact admin to reset credentials.')}
-                        >
-                            <Text style={styles.forgotText}>Forgot Password?</Text>
-                        </TouchableOpacity>
+                        {/* Language Button + Forgot Password Row */}
+                        <View style={styles.forgotRow}>
+                            <TouchableOpacity
+                                style={styles.langBtn}
+                                activeOpacity={0.7}
+                                onPress={() => setLangDropdownVisible(true)}
+                            >
+                                <View style={styles.langBtnIcon}>
+                                    <View style={styles.langBtnLeft}>
+                                        <Text style={styles.langBtnA}>A</Text>
+                                    </View>
+                                    <View style={styles.langBtnRight}>
+                                        <Text style={styles.langBtnZh}>文</Text>
+                                    </View>
+                                </View>
+                                <Text style={styles.langBtnText}>
+                                    {LANGUAGES.find(l => l.code === language)?.label || 'English'}
+                                </Text>
+                                <Ionicons name="chevron-down" size={14} color="#6B7280" />
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                activeOpacity={0.7}
+                                onPress={() => Alert.alert(t('login.resetPassword'), t('login.resetPasswordMsg'))}
+                            >
+                                <Text style={styles.forgotText}>{t('login.forgotPassword')}</Text>
+                            </TouchableOpacity>
+                        </View>
 
                         <TouchableOpacity
                             onPress={handleLogin}
@@ -160,19 +236,12 @@ const LoginScreen = ({ navigation }: any) => {
                                 {loginMutation.isPending ? (
                                     <ActivityIndicator color="#fff" />
                                 ) : (
-                                    <Text style={styles.loginBtnText}>Sign In</Text>
+                                    <Text style={styles.loginBtnText}>{t('login.signIn')}</Text>
                                 )}
                             </LinearGradient>
                         </TouchableOpacity>
                     </View>
 
-                    {/* Footer */}
-                    <View style={styles.footer}>
-                        <Text style={styles.footerText}>Need an account? </Text>
-                        <TouchableOpacity onPress={() => Alert.alert('Contact Admin', 'Driver accounts are created by fleet managers.')}>
-                            <Text style={styles.linkText}>Contact Admin</Text>
-                        </TouchableOpacity>
-                    </View>
                 </Animated.View>
             </KeyboardAvoidingView>
         </View>
@@ -226,8 +295,145 @@ const styles = StyleSheet.create({
     inputIcon: { marginLeft: 16, marginRight: 12 },
     input: { flex: 1, color: '#111', fontSize: 16, height: '100%' },
 
-    forgotBtn: { alignSelf: 'flex-end', marginBottom: 24 },
+    // Forgot row — language button on left, forgot password on right
+    forgotRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+
     forgotText: { color: '#EF4444', fontWeight: '600', fontSize: 14 },
+
+    // Language button (Google Translate style)
+    langBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 10,
+        backgroundColor: '#F3F4F6',
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    langBtnIcon: {
+        flexDirection: 'row',
+        width: 28,
+        height: 20,
+        borderRadius: 4,
+        overflow: 'hidden',
+    },
+    langBtnLeft: {
+        flex: 1,
+        backgroundColor: '#4285F4',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    langBtnRight: {
+        flex: 1,
+        backgroundColor: '#E0E0E0',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    langBtnA: {
+        fontSize: 11,
+        fontWeight: '800',
+        color: '#fff',
+    },
+    langBtnZh: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#5F6368',
+    },
+    langBtnText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#374151',
+    },
+
+    // Language dropdown modal
+    langModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.35)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    langDropdown: {
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        width: width * 0.78,
+        paddingVertical: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 24,
+        elevation: 10,
+    },
+    langDropdownHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: '#E5E7EB',
+    },
+    langIconSmall: {
+        flexDirection: 'row',
+        width: 36,
+        height: 26,
+        borderRadius: 6,
+        overflow: 'hidden',
+    },
+    langIconA: {
+        flex: 1,
+        backgroundColor: '#4285F4',
+        textAlign: 'center',
+        textAlignVertical: 'center',
+        lineHeight: 26,
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#fff',
+    },
+    langIconZh: {
+        flex: 1,
+        backgroundColor: '#E0E0E0',
+        textAlign: 'center',
+        textAlignVertical: 'center',
+        lineHeight: 26,
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#5F6368',
+    },
+    langDropdownTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#1F2937',
+    },
+    langOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+    },
+    langOptionActive: {
+        backgroundColor: '#FEF2F2',
+    },
+    langFlag: {
+        fontSize: 20,
+    },
+    langLabel: {
+        flex: 1,
+        fontSize: 15,
+        fontWeight: '500',
+        color: '#374151',
+    },
+    langLabelActive: {
+        fontWeight: '700',
+        color: '#EF4444',
+    },
 
     loginBtn: {
         borderRadius: 16,
@@ -244,10 +450,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     loginBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
-
-    footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 16 },
-    footerText: { color: '#6B7280', fontSize: 14 },
-    linkText: { color: '#EF4444', fontWeight: '700', fontSize: 14 },
 });
 
 export default LoginScreen;

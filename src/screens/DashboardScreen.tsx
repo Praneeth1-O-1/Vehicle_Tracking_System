@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getDriverJobs, updateStopStatus, reportBreakdown, startTrip, uploadTaskExplanation, rejectTask, addTaskRemark } from '../services/api';
 import AudioRecorder from '../components/AudioRecorder';
+import { useTranslation } from '../i18n/i18n';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -66,12 +67,7 @@ interface Job {
     updatedAt: string;
 }
 
-const TABS: { key: TabKey; label: string }[] = [
-    { key: 'pending', label: 'Pending' },
-    { key: 'all', label: 'All' },
-    { key: 'interrupted', label: 'Interrupted' },
-    { key: 'completed', label: 'Completed' },
-];
+const TAB_KEYS: TabKey[] = ['pending', 'all', 'interrupted', 'completed'];
 
 // ─── Parse Backend Jobs → Job[] ──────────────────────────────
 // Backend getDriverJobs returns buildRouteResponse format:
@@ -168,8 +164,7 @@ const parseJobs = (rawJobs: any[]): Job[] => {
 
 const isDone = (s: StopStatus) => s === 'delivered' || s === 'picked_up' || s === 'skipped' || s === 'location_changed_completed' || s === 'rejected';
 
-const jobStatusText = (o: JobOverall) =>
-    o === 'completed' ? 'Completed' : o === 'interrupted' ? 'Interrupted' : 'In progress';
+// jobStatusText is now inside the component to access t()
 
 const formatJobDate = (iso: string): string => {
     if (!iso) return '';
@@ -186,23 +181,23 @@ const formatJobDate = (iso: string): string => {
     } catch { return ''; }
 };
 
-const getJobDateLabel = (job: Job): string => {
+const getJobDateLabel = (job: Job, t: (key: string) => string): string => {
     switch (job.overall) {
         case 'completed': {
             const d = formatJobDate(job.updatedAt);
-            return d ? `Completed ${d}` : '';
+            return d ? `${t('dashboard.completedDate')} ${d}` : '';
         }
         case 'interrupted': {
             const d = formatJobDate(job.updatedAt);
-            return d ? `Interrupted ${d}` : '';
+            return d ? `${t('dashboard.interruptedDate')} ${d}` : '';
         }
         default: {
             if (job.started) {
                 const d = formatJobDate(job.updatedAt || job.createdAt);
-                return d ? `Started ${d}` : '';
+                return d ? `${t('dashboard.started')} ${d}` : '';
             }
             const d = formatJobDate(job.createdAt);
-            return d ? `Assigned ${d}` : '';
+            return d ? `${t('dashboard.assigned')} ${d}` : '';
         }
     }
 };
@@ -211,6 +206,16 @@ const getJobDateLabel = (job: Job): string => {
 // COMPONENT
 // ═══════════════════════════════════════════════════════
 const DashboardScreen = ({ navigation }: any) => {
+    const { t } = useTranslation();
+
+    const TABS: { key: TabKey; label: string }[] = TAB_KEYS.map(key => ({
+        key,
+        label: t(`dashboard.${key}`),
+    }));
+
+    const jobStatusText = (o: JobOverall) =>
+        o === 'completed' ? t('dashboard.completed') : o === 'interrupted' ? t('dashboard.interrupted') : t('dashboard.inProgress');
+
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loadingJobs, setLoadingJobs] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -321,12 +326,12 @@ const DashboardScreen = ({ navigation }: any) => {
 
     const handleComplete = (stop: Stop) => {
         Alert.alert(
-            'Confirm Completion',
-            `Are you sure you want to mark this task as done?`,
+            t('dashboard.confirmCompletion'),
+            t('dashboard.confirmCompletionMsg'),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('dashboard.cancel'), style: 'cancel' },
                 {
-                    text: 'Yes, Done',
+                    text: t('dashboard.yesDone'),
                     style: 'default',
                     onPress: async () => {
                         setUpdatingId(stop.id);
@@ -356,7 +361,7 @@ const DashboardScreen = ({ navigation }: any) => {
                             await finalizeCompletion(stop, latitude, longitude);
                         } catch (error: any) {
                             const msg = error.response?.data?.error || error.message || 'Failed to complete stop.';
-                            Alert.alert('Error', msg);
+                            Alert.alert(t('common.error'), msg);
                         } finally {
                             setUpdatingId(null);
                         }
@@ -375,8 +380,9 @@ const DashboardScreen = ({ navigation }: any) => {
 
             if (uploadedMessageId) {
                 await addTaskRemark(audioModalStop.jobId, audioModalStop.index, {
+
                     type: 'delay',
-                    text: 'Delayed Arrival',
+                    text: t('common.delayedArrival'),
                     audio_message_id: uploadedMessageId
                 });
             }
@@ -386,10 +392,10 @@ const DashboardScreen = ({ navigation }: any) => {
 
             setAudioModalStop(null);
             setPendingLocation(null);
-            Alert.alert('Done', 'Task completed and audio explanation recorded.');
+            Alert.alert(t('dashboard.done'), t('dashboard.taskDoneAudioDone'));
         } catch (error: any) {
             const msg = error.response?.data?.error || error.message || 'Failed to submit.';
-            Alert.alert('Error', msg);
+            Alert.alert(t('common.error'), msg);
         } finally {
             setUpdatingId(null);
         }
@@ -397,7 +403,7 @@ const DashboardScreen = ({ navigation }: any) => {
 
     const openNavigation = (stop: Stop) => {
         if (!stop.lat || !stop.lng) {
-            Alert.alert('No Location', 'Coordinates not available for this stop.');
+            Alert.alert(t('dashboard.noLocation'), t('dashboard.noLocationMsg'));
             return;
         }
         Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}&travelmode=driving`);
@@ -406,7 +412,7 @@ const DashboardScreen = ({ navigation }: any) => {
     const openJobRoute = async (job: Job) => {
         const pendingStops = job.stops.filter(s => !isDone(s.status) && s.lat && s.lng);
         if (pendingStops.length === 0) {
-            Alert.alert('No Stops', 'No pending stops with coordinates available.');
+            Alert.alert(t('dashboard.noStops'), t('dashboard.noStopsMsg'));
             return;
         }
 
@@ -436,7 +442,7 @@ const DashboardScreen = ({ navigation }: any) => {
     let phone = stop.phone;
 
     if (!phone) {
-        Alert.alert('No Phone Number', 'No contact number is available for this stop.');
+        Alert.alert(t('dashboard.noLocation'), 'No contact number is available for this stop.');
         return;
     }
 
@@ -464,7 +470,7 @@ const DashboardScreen = ({ navigation }: any) => {
         try {
             await Linking.openURL(`telprompt:${phone}`);
         } catch (err2) {
-            Alert.alert('Error', 'Unable to open dialer on this device');
+            Alert.alert(t('common.error'), 'Unable to open dialer on this device');
         }
     }
 };
@@ -474,7 +480,7 @@ const DashboardScreen = ({ navigation }: any) => {
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert('Location Required', 'Please allow location access to start the trip.');
+                Alert.alert(t('dashboard.locationRequired'), t('dashboard.locationRequiredMsg'));
                 setStartingJobId(null);
                 return;
             }
@@ -487,10 +493,10 @@ const DashboardScreen = ({ navigation }: any) => {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             setExpandedJobId(job.jobId);
             
-            Alert.alert('Trip Started', 'Your delivery has started. ETA has been updated.');
+            Alert.alert(t('dashboard.tripStarted'), t('dashboard.tripStartedMsg'));
         } catch (error: any) {
             const msg = error.response?.data?.error || error.message || 'Failed to start trip. Try again.';
-            Alert.alert('Error', msg);
+            Alert.alert(t('common.error'), msg);
         } finally {
             setStartingJobId(null);
         }
@@ -498,12 +504,12 @@ const DashboardScreen = ({ navigation }: any) => {
 
     const handleBreakdown = (job: Job) => {
         Alert.alert(
-            'Vehicle Breakdown',
-            `Report a vehicle breakdown for Job #${job.jobId}?\n\nThis will interrupt the job and notify all managers via email.`,
+            t('dashboard.vehicleBreakdown'),
+            t('dashboard.vehicleBreakdownMsg', { jobId: job.jobId }),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('dashboard.cancel'), style: 'cancel' },
                 {
-                    text: 'Report Breakdown',
+                    text: t('dashboard.reportBreakdownBtn'),
                     style: 'destructive',
                     onPress: async () => {
                         setBreakdownJobId(job.jobId);
@@ -522,12 +528,12 @@ const DashboardScreen = ({ navigation }: any) => {
                                     : j
                             ));
                             Alert.alert(
-                                'Breakdown Reported',
-                                'Managers have been notified via email.\n\nPlease record a voice message to the manager who assigned this job explaining the situation.',
+                                t('dashboard.breakdownReported'),
+                                t('dashboard.breakdownReportedMsg'),
                                 [
-                                    { text: 'Later', style: 'cancel' },
+                                    { text: t('dashboard.later'), style: 'cancel' },
                                     {
-                                        text: 'Record Message',
+                                        text: t('dashboard.recordMessage'),
                                         onPress: () => {
                                             navigation.navigate('AudioMessages', {
                                                 breakdownContext: true,
@@ -539,7 +545,7 @@ const DashboardScreen = ({ navigation }: any) => {
                             );
                         } catch (error: any) {
                             const msg = error.response?.data?.error || error.message || 'Failed to report breakdown.';
-                            Alert.alert('Error', msg);
+                            Alert.alert(t('common.error'), msg);
                         } finally {
                             setBreakdownJobId(null);
                         }
@@ -550,10 +556,10 @@ const DashboardScreen = ({ navigation }: any) => {
     };
 
     const handleLogout = async () => {
-        Alert.alert('Logout', 'Are you sure?', [
-            { text: 'Cancel', style: 'cancel' },
+        Alert.alert(t('dashboard.logout'), t('dashboard.logoutConfirm'), [
+            { text: t('dashboard.cancel'), style: 'cancel' },
             {
-                text: 'Logout', style: 'destructive',
+                text: t('dashboard.logout'), style: 'destructive',
                 onPress: async () => {
                     await SecureStore.deleteItemAsync('token');
                     await SecureStore.deleteItemAsync('user');
@@ -592,7 +598,7 @@ const DashboardScreen = ({ navigation }: any) => {
                         borderRadius: 6, marginBottom: 8, alignSelf: 'flex-start',
                     }}>
                         <Ionicons name="close-circle" size={12} color="#DC2626" />
-                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#DC2626' }}>Rejected (Permanent)</Text>
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#DC2626' }}>{t('dashboard.rejectedPermanent')}</Text>
                     </View>
                 )}
 
@@ -605,7 +611,7 @@ const DashboardScreen = ({ navigation }: any) => {
                         />
                         <View style={{ flex: 1 }}>
                             <Text style={[st.stopLabel, done && st.stopLabelDone]}>
-                                {stop.type === 'pickup' ? 'Pickup' : 'Drop-off'}
+                                {stop.type === 'pickup' ? t('dashboard.pickup') : t('dashboard.dropOff')}
                             </Text>
                             <TouchableOpacity onPress={() => navigation.navigate('TaskDetail', { stop })} activeOpacity={0.6}>
                                 <Text style={[st.stopName, done && st.stopNameDone, !done && st.stopNameLink]} numberOfLines={1}>
@@ -643,29 +649,29 @@ const DashboardScreen = ({ navigation }: any) => {
                             >
                                 {loading
                                     ? <ActivityIndicator size="small" color="#fff" />
-                                    : <><Ionicons name="checkmark" size={16} color="#fff" /><Text style={st.btnDoneText}>Done</Text></>
+                                    : <><Ionicons name="checkmark" size={16} color="#fff" /><Text style={st.btnDoneText}>{t('dashboard.done')}</Text></>
                                 }
                             </TouchableOpacity>
                             <TouchableOpacity style={st.btnCall} onPress={() => handleCall(stop)}>
                                 <Ionicons name="call" size={15} color="#fff" />
-                                <Text style={st.btnCallText}>Call</Text>
+                                <Text style={st.btnCallText}>{t('dashboard.call')}</Text>
                             </TouchableOpacity>
                         </View>
                         <View style={st.btnRow}>
                             <TouchableOpacity style={st.btnOutline} onPress={() => openNavigation(stop)}>
                                 <Ionicons name="navigate-outline" size={15} color="#1D1D1F" />
-                                <Text style={st.btnOutlineText}>Map</Text>
+                                <Text style={st.btnOutlineText}>{t('dashboard.map')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={st.btnOutline} onPress={() => handleSkip(stop)}>
                                 <Ionicons name="flag-outline" size={15} color="#1D1D1F" />
-                                <Text style={st.btnOutlineText}>Reason</Text>
+                                <Text style={st.btnOutlineText}>{t('dashboard.reason')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[st.btnOutline, { borderColor: '#FCA5A5' }]}
                                 onPress={() => navigation.navigate('RejectTask', { stop })}
                             >
                                 <Ionicons name="trash-outline" size={15} color="#EF4444" />
-                                <Text style={[st.btnOutlineText, { color: '#EF4444' }]}>Reject</Text>
+                                <Text style={[st.btnOutlineText, { color: '#EF4444' }]}>{t('dashboard.reject')}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -683,14 +689,14 @@ const DashboardScreen = ({ navigation }: any) => {
             <View key={job.jobId} style={st.jobCard}>
                 <TouchableOpacity activeOpacity={0.7} onPress={() => toggleExpand(job.jobId)} style={st.jobRow}>
                     <View style={{ flex: 1 }}>
-                        <Text style={st.jobTitle}>Job #{job.jobId}</Text>
+                        <Text style={st.jobTitle}>{t('dashboard.job')} #{job.jobId}</Text>
                         <Text style={st.jobSub}>
-                            {jobStatusText(job.overall)}  ·  {job.completedCount}/{job.totalCount} stops  ·  {pct}%
+                            {jobStatusText(job.overall)}  ·  {job.completedCount}/{job.totalCount} {t('dashboard.stops')}  ·  {pct}%
                         </Text>
-                        {getJobDateLabel(job) !== '' && (
+                        {getJobDateLabel(job, t) !== '' && (
                             <View style={st.jobDateRow}>
                                 <Ionicons name="calendar-outline" size={12} color="#AEAEB2" />
-                                <Text style={st.jobDate}>{getJobDateLabel(job)}</Text>
+                                <Text style={st.jobDate}>{getJobDateLabel(job, t)}</Text>
                             </View>
                         )}
                     </View>
@@ -706,7 +712,7 @@ const DashboardScreen = ({ navigation }: any) => {
                             ) : (
                                 <>
                                     <Ionicons name="play" size={14} color="#fff" />
-                                    <Text style={st.startBtnText}>Start</Text>
+                                    <Text style={st.startBtnText}>{t('dashboard.start')}</Text>
                                 </>
                             )}
                         </TouchableOpacity>
@@ -714,7 +720,7 @@ const DashboardScreen = ({ navigation }: any) => {
                     {job.overall === 'pending' && (
                         <TouchableOpacity style={st.jobMapBtn} onPress={() => openJobRoute(job)} activeOpacity={0.7}>
                             <Ionicons name="map-outline" size={16} color="#fff" />
-                            <Text style={st.jobMapBtnText}>Route</Text>
+                            <Text style={st.jobMapBtnText}>{t('dashboard.route')}</Text>
                         </TouchableOpacity>
                     )}
                     <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color="#AEAEB2" />
@@ -739,7 +745,7 @@ const DashboardScreen = ({ navigation }: any) => {
                                 ) : (
                                     <>
                                         <Ionicons name="warning-outline" size={18} color="#FF3B30" />
-                                        <Text style={st.breakdownLabel}>Report Vehicle Breakdown</Text>
+                                        <Text style={st.breakdownLabel}>{t('dashboard.reportBreakdown')}</Text>
                                         <Ionicons name="chevron-forward" size={16} color="#AEAEB2" />
                                     </>
                                 )}
@@ -774,8 +780,8 @@ const DashboardScreen = ({ navigation }: any) => {
                 <View style={st.modalOverlay}>
                     <View style={st.modalContent}>
                         <AudioRecorder
-                            title="Late Task — Explanation Required"
-                            subtitle={`You are completing task #${audioModalStop?.index} later than scheduled. Please record a brief audio explanation.`}
+                            title={t('dashboard.lateTaskTitle')}
+                            subtitle={t('dashboard.lateTaskSubtitle', { index: audioModalStop?.index || '' })}
                             onRecordingComplete={handleLateAudioComplete}
                             onCancel={() => {
                                 setAudioModalStop(null);
@@ -790,7 +796,7 @@ const DashboardScreen = ({ navigation }: any) => {
             {/* Header */}
             <View style={st.header}>
                 <View>
-                    <Text style={st.hi}>Hello,</Text>
+                    <Text style={st.hi}>{t('dashboard.hello')}</Text>
                     <Text style={st.name}>{userName}</Text>
                 </View>
                 <View style={st.headerRight}>
@@ -810,9 +816,9 @@ const DashboardScreen = ({ navigation }: any) => {
             <View style={st.progressBox}>
                 <View style={st.summaryCard}>
                     <View style={st.summaryLeft}>
-                        <Text style={st.summaryTitle}>Pending Job Progress</Text>
+                        <Text style={st.summaryTitle}>{t('dashboard.pendingJobProgress')}</Text>
                         <Text style={st.summaryCount}>
-                            {totalCompleted}<Text style={st.summaryOf}> / {totalStops} stops</Text>
+                            {totalCompleted}<Text style={st.summaryOf}> / {totalStops} {t('dashboard.stops')}</Text>
                         </Text>
                     </View>
                     <Text style={st.summaryPct}>{Math.round(progress * 100)}%</Text>
@@ -823,22 +829,28 @@ const DashboardScreen = ({ navigation }: any) => {
             </View>
 
             {/* Tabs */}
-            <View style={st.tabBar}>
-                {TABS.map(tab => {
-                    const active = activeTab === tab.key;
-                    const count = filterJobs(tab.key).length;
-                    return (
-                        <TouchableOpacity
-                            key={tab.key}
-                            onPress={() => { setActiveTab(tab.key); setExpandedJobId(null); }}
-                            style={[st.tab, active && st.tabActive]}
-                        >
-                            <Text style={[st.tabText, active && st.tabTextActive]}>
-                                {tab.label}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
+            <View style={st.tabBarContainer}>
+                <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={st.tabBar}
+                >
+                    {TABS.map(tab => {
+                        const active = activeTab === tab.key;
+                        const count = filterJobs(tab.key).length;
+                        return (
+                            <TouchableOpacity
+                                key={tab.key}
+                                onPress={() => { setActiveTab(tab.key); setExpandedJobId(null); }}
+                                style={[st.tab, active && st.tabActive]}
+                            >
+                                <Text style={[st.tabText, active && st.tabTextActive]}>
+                                    {tab.label}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </ScrollView>
             </View>
 
             {/* Job list */}
@@ -857,8 +869,8 @@ const DashboardScreen = ({ navigation }: any) => {
                     {filtered.length === 0 ? (
                         <View style={st.empty}>
                             <Ionicons name="cube-outline" size={40} color="#D2D2D7" />
-                            <Text style={st.emptyTitle}>No jobs here</Text>
-                            <Text style={st.emptyBody}>Pull down to refresh.</Text>
+                            <Text style={st.emptyTitle}>{t('dashboard.noJobsHere')}</Text>
+                            <Text style={st.emptyBody}>{t('dashboard.pullToRefresh')}</Text>
                         </View>
                     ) : (
                         filtered.map(renderJob)
@@ -921,9 +933,11 @@ const st = StyleSheet.create({
     summaryBarFill: { height: 4, backgroundColor: '#1D1D1F', borderRadius: 2 },
 
     // Tabs
+    tabBarContainer: {
+        borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E5E5EA',
+    },
     tabBar: {
         flexDirection: 'row', paddingHorizontal: 20,
-        borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E5E5EA',
     },
     tab: {
         paddingBottom: 10, marginRight: 20,

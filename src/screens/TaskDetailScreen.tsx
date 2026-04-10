@@ -11,21 +11,23 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from '../i18n/i18n';
 
 const TaskDetailScreen = ({ navigation, route }: any) => {
+    const { t } = useTranslation();
     const { stop } = route.params || {};
 
     if (!stop) {
         return (
             <SafeAreaView style={s.container}>
-                <Text style={{ padding: 20 }}>No task data available.</Text>
+                <Text style={{ padding: 20 }}>{t('taskDetail.noTaskData')}</Text>
             </SafeAreaView>
         );
     }
 
     const openMap = () => {
         if (!stop.lat || !stop.lng) {
-            Alert.alert('No Location', 'Coordinates not available for this stop.');
+            Alert.alert(t('taskDetail.noLocation'), t('taskDetail.noLocationMsg'));
             return;
         }
         Linking.openURL(
@@ -35,10 +37,10 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
 
     const statusLabel = (status: string) => {
         switch (status) {
-            case 'delivered': return 'Delivered';
-            case 'picked_up': return 'Picked Up';
-            case 'skipped': return 'Skipped';
-            default: return 'Pending';
+            case 'delivered': return t('taskDetail.delivered');
+            case 'picked_up': return t('taskDetail.pickedUp');
+            case 'skipped': return t('taskDetail.skipped');
+            default: return t('taskDetail.pendingStatus');
         }
     };
 
@@ -60,7 +62,7 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
                     <Ionicons name="chevron-back" size={20} color="#1E293B" />
                 </TouchableOpacity>
-                <Text style={s.headerTitle}>Task Details</Text>
+                <Text style={s.headerTitle}>{t('taskDetail.headerTitle')}</Text>
                 <View style={{ width: 36 }} />
             </View>
 
@@ -83,7 +85,7 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                         </View>
                     </View>
                     <Text style={s.heroLabel}>
-                        {stop.type === 'pickup' ? 'Pickup Location' : 'Drop-off Location'}
+                        {stop.type === 'pickup' ? t('taskDetail.pickupLocation') : t('taskDetail.dropOffLocation')}
                     </Text>
                     <Text style={s.heroName}>{stop.name}</Text>
                     {stop.locationName && stop.locationName !== stop.name && (
@@ -95,21 +97,21 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 </View>
 
                 {/* Details grid */}
-                <Text style={s.sectionTitle}>Task Information</Text>
+                <Text style={s.sectionTitle}>{t('taskDetail.taskInformation')}</Text>
                 <View style={s.detailsCard}>
-                    <DetailRow icon="location-outline" label="Customer Location" value={stop.locationName || stop.customer || '—'} />
-                    <DetailRow icon="cube-outline" label="Weight" value={stop.weight ? `${stop.weight} kg` : '—'} />
-                    <DetailRow icon="time-outline" label="ETA" value={stop.eta || '—'} />
-                    <DetailRow icon="layers-outline" label="Stacking" value={stop.stacking != null ? String(stop.stacking) : '—'} />
-                    <DetailRow icon="resize-outline" label="Volume" value={stop.cubicCm != null ? `${stop.cubicCm} cm³` : '—'} />
-                    <DetailRow icon="flag-outline" label="Priority" value={stop.priority != null ? String(stop.priority) : '—'} />
-                    <DetailRow icon="alarm-outline" label="Time Constraint" value={stop.timeConstraint || '—'} />
-                    <DetailRow icon="construct-outline" label="Task Type" value={stop.taskType || '—'} last />
+                    <DetailRow icon="location-outline" label={t('taskDetail.customerLocation')} value={stop.locationName || stop.customer || '—'} />
+                    <DetailRow icon="cube-outline" label={t('taskDetail.weight')} value={stop.weight ? `${stop.weight} kg` : '—'} />
+                    <DetailRow icon="time-outline" label={t('taskDetail.eta')} value={stop.eta || '—'} />
+                    <DetailRow icon="layers-outline" label={t('taskDetail.stacking')} value={stop.stacking != null ? String(stop.stacking) : '—'} />
+                    <DetailRow icon="resize-outline" label={t('taskDetail.volume')} value={stop.cubicCm != null ? `${stop.cubicCm} cm³` : '—'} />
+                    <DetailRow icon="flag-outline" label={t('taskDetail.priority')} value={stop.priority != null ? String(stop.priority) : '—'} />
+                    <DetailRow icon="alarm-outline" label={t('taskDetail.timeConstraint')} value={stop.timeConstraint || '—'} />
+                    <DetailRow icon="construct-outline" label={t('taskDetail.taskType')} value={stop.taskType || '—'} last />
                 </View>
 
                 {stop.reason && (
                     <>
-                        <Text style={s.sectionTitle}>Reason</Text>
+                        <Text style={s.sectionTitle}>{t('taskDetail.reason')}</Text>
                         <View style={s.reasonCard}>
                             <Ionicons name="alert-circle-outline" size={18} color="#EA580C" />
                             <Text style={s.reasonText}>{stop.reason}</Text>
@@ -121,7 +123,7 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 {stop.lat && stop.lng && (
                     <TouchableOpacity style={s.mapBtn} activeOpacity={0.8} onPress={openMap}>
                         <Ionicons name="navigate" size={18} color="#fff" />
-                        <Text style={s.mapBtnText}>Open in Google Maps</Text>
+                        <Text style={s.mapBtnText}>{t('taskDetail.openInGoogleMaps')}</Text>
                     </TouchableOpacity>
                 )}
             </ScrollView>
