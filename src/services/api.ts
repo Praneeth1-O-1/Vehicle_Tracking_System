@@ -228,4 +228,18 @@ export const addTaskRemark = async (
     return response.data;
 };
 
+// END JOB (Driver-initiated job completion)
+export const endJob = async (
+    job_id: string | number,
+    latitude: number,
+    longitude: number
+) => {
+    const response = await api.post('/api/jobs/end', {
+        job_id,
+        latitude,
+        longitude,
+    });
+    return response.data;
+};
+
 export default api;

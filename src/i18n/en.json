@@ -31,6 +31,8 @@
     "start": "Start",
     "route": "Route",
     "done": "Done",
+    "arrived": "Arrived",
+    "endJob": "End Job",
     "call": "Call",
     "map": "Map",
     "reason": "Reason",

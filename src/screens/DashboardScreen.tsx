@@ -19,7 +19,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { getDriverJobs, updateStopStatus, reportBreakdown, startTrip, uploadTaskExplanation, rejectTask, addTaskRemark } from '../services/api';
+import { getDriverJobs, updateStopStatus, reportBreakdown, startTrip, uploadTaskExplanation, rejectTask, addTaskRemark, endJob } from '../services/api';
 import AudioRecorder from '../components/AudioRecorder';
 import { useTranslation } from '../i18n/i18n';
 
@@ -28,7 +28,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 // ─── Types ───────────────────────────────────────────────────
-type StopStatus = 'pending' | 'completed' | 'delivered' | 'picked_up' | 'skipped' | 'location_changed_pending' | 'location_changed_completed' | 'rejected';
+type StopStatus = 'pending' | 'arrived' | 'completed' | 'delivered' | 'picked_up' | 'skipped' | 'location_changed_pending' | 'location_changed_completed' | 'rejected';
 type JobOverall = 'pending' | 'completed' | 'interrupted';
 type TabKey = 'pending' | 'all' | 'interrupted' | 'completed';
 
@@ -111,7 +111,9 @@ const parseJobs = (rawJobs: any[]): Job[] => {
             const eta = task.dynamicEta || task.scheduledTime || '';
 
             let normalizedStatus: StopStatus = 'pending';
-            if (stopStatusStr === 'completed') {
+            if (stopStatusStr === 'arrived') {
+                normalizedStatus = 'arrived';
+            } else if (stopStatusStr === 'completed') {
                 normalizedStatus = isPickup ? 'picked_up' : 'delivered';
             } else if (stopStatusStr === 'location_changed_pending') {
                 normalizedStatus = 'location_changed_pending';
@@ -166,7 +168,7 @@ const isDone = (s: StopStatus) => s === 'delivered' || s === 'picked_up' || s ==
 
 // jobStatusText is now inside the component to access t()
 
-const formatJobDate = (iso: string): string => {
+const formatJobDate = (iso: string, t: (key: string) => string): string => {
     if (!iso) return '';
     try {
         const d = new Date(iso);
@@ -175,8 +177,8 @@ const formatJobDate = (iso: string): string => {
         const yesterday = new Date(today);
         yesterday.setDate(today.getDate() - 1);
         const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        if (d.toDateString() === today.toDateString()) return `Today, ${timeStr}`;
-        if (d.toDateString() === yesterday.toDateString()) return `Yesterday, ${timeStr}`;
+        if (d.toDateString() === today.toDateString()) return `${t('dashboard.today')}, ${timeStr}`;
+        if (d.toDateString() === yesterday.toDateString()) return `${t('dashboard.yesterday')}, ${timeStr}`;
         return d.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
     } catch { return ''; }
 };
@@ -184,19 +186,19 @@ const formatJobDate = (iso: string): string => {
 const getJobDateLabel = (job: Job, t: (key: string) => string): string => {
     switch (job.overall) {
         case 'completed': {
-            const d = formatJobDate(job.updatedAt);
+            const d = formatJobDate(job.updatedAt, t);
             return d ? `${t('dashboard.completedDate')} ${d}` : '';
         }
         case 'interrupted': {
-            const d = formatJobDate(job.updatedAt);
+            const d = formatJobDate(job.updatedAt, t);
             return d ? `${t('dashboard.interruptedDate')} ${d}` : '';
         }
         default: {
             if (job.started) {
-                const d = formatJobDate(job.updatedAt || job.createdAt);
+                const d = formatJobDate(job.updatedAt || job.createdAt, t);
                 return d ? `${t('dashboard.started')} ${d}` : '';
             }
-            const d = formatJobDate(job.createdAt);
+            const d = formatJobDate(job.createdAt, t);
             return d ? `${t('dashboard.assigned')} ${d}` : '';
         }
     }
@@ -322,6 +324,38 @@ const DashboardScreen = ({ navigation }: any) => {
                 overall: allDone ? 'completed' as JobOverall : j.overall,
             };
         }));
+    };
+
+    const handleArrive = async (stop: Stop) => {
+        setUpdatingId(stop.id);
+        try {
+            let latitude = 0;
+            let longitude = 0;
+            try {
+                const { status: locStatus } = await Location.getForegroundPermissionsAsync();
+                if (locStatus === 'granted') {
+                    const loc = await Location.getLastKnownPositionAsync() || await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                    if (loc) {
+                        latitude = loc.coords.latitude;
+                        longitude = loc.coords.longitude;
+                    }
+                }
+            } catch (e) {}
+
+            await updateStopStatus(stop.jobId, stop.index, 'arrived', undefined, latitude, longitude);
+            setJobs(prev => prev.map(j => {
+                if (j.jobId !== stop.jobId) return j;
+                const updatedStops = j.stops.map(s =>
+                    s.id === stop.id ? { ...s, status: 'arrived' as StopStatus } : s
+                );
+                return { ...j, stops: updatedStops };
+            }));
+        } catch (error: any) {
+            const msg = error.response?.data?.error || error.message || 'Failed to arrive.';
+            Alert.alert(t('common.error'), msg);
+        } finally {
+            setUpdatingId(null);
+        }
     };
 
     const handleComplete = (stop: Stop) => {
@@ -502,6 +536,47 @@ const DashboardScreen = ({ navigation }: any) => {
         }
     };
 
+    const [endingJobId, setEndingJobId] = useState<string | null>(null);
+
+    const handleEndJob = (job: Job) => {
+        Alert.alert(
+            'End Job',
+            `Are you sure you want to end Job #${job.jobId}? This will mark the job as completed.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'End Job',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setEndingJobId(job.jobId);
+                        try {
+                            const { status } = await Location.requestForegroundPermissionsAsync();
+                            let lat = 0, lng = 0;
+                            if (status === 'granted') {
+                                const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+                                lat = loc.coords.latitude;
+                                lng = loc.coords.longitude;
+                            }
+                            await endJob(job.jobId, lat, lng);
+                            setJobs(prev => prev.map(j =>
+                                j.jobId === job.jobId
+                                    ? { ...j, overall: 'completed' as JobOverall }
+                                    : j
+                            ));
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            Alert.alert('Job Ended', `Job #${job.jobId} has been marked as completed.`);
+                        } catch (error: any) {
+                            const msg = error.response?.data?.error || error.message || 'Failed to end job. Try again.';
+                            Alert.alert('Error', msg);
+                        } finally {
+                            setEndingJobId(null);
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
     const handleBreakdown = (job: Job) => {
         Alert.alert(
             t('dashboard.vehicleBreakdown'),
@@ -635,23 +710,36 @@ const DashboardScreen = ({ navigation }: any) => {
                 {!done && (
                     <View style={st.btnSection}>
                         <View style={st.btnRow}>
-                            <TouchableOpacity
-                                style={st.btnDone}
-                                onPress={() => {
-                                    if (isLocationChanged) {
-                                        // For location-changed tasks, use location_changed_completed status
-                                        handleComplete({ ...stop, _useLocationChangedStatus: true } as any);
-                                    } else {
-                                        handleComplete(stop);
+                            {stop.status === 'arrived' ? (
+                                <TouchableOpacity
+                                    style={st.btnDone}
+                                    onPress={() => {
+                                        if (isLocationChanged) {
+                                            // For location-changed tasks, use location_changed_completed status
+                                            handleComplete({ ...stop, _useLocationChangedStatus: true } as any);
+                                        } else {
+                                            handleComplete(stop);
+                                        }
+                                    }}
+                                    disabled={loading}
+                                >
+                                    {loading
+                                        ? <ActivityIndicator size="small" color="#fff" />
+                                        : <><Ionicons name="checkmark" size={16} color="#fff" /><Text style={st.btnDoneText}>{t('dashboard.done')}</Text></>
                                     }
-                                }}
-                                disabled={loading}
-                            >
-                                {loading
-                                    ? <ActivityIndicator size="small" color="#fff" />
-                                    : <><Ionicons name="checkmark" size={16} color="#fff" /><Text style={st.btnDoneText}>{t('dashboard.done')}</Text></>
-                                }
-                            </TouchableOpacity>
+                                </TouchableOpacity>
+                            ) : (
+                                <TouchableOpacity
+                                    style={[st.btnDone, { backgroundColor: '#F59E0B' }]}
+                                    onPress={() => handleArrive(stop)}
+                                    disabled={loading}
+                                >
+                                    {loading
+                                        ? <ActivityIndicator size="small" color="#fff" />
+                                        : <><Ionicons name="location-sharp" size={16} color="#fff" /><Text style={st.btnDoneText}>{t('dashboard.arrived')}</Text></>
+                                    }
+                                </TouchableOpacity>
+                            )}
                             <TouchableOpacity style={st.btnCall} onPress={() => handleCall(stop)}>
                                 <Ionicons name="call" size={15} color="#fff" />
                                 <Text style={st.btnCallText}>{t('dashboard.call')}</Text>
@@ -700,22 +788,40 @@ const DashboardScreen = ({ navigation }: any) => {
                             </View>
                         )}
                     </View>
-                    {job.overall === 'pending' && !job.started && (
-                        <TouchableOpacity
-                            style={st.startBtn}
-                            onPress={() => handleStartTrip(job)}
-                            activeOpacity={0.7}
-                            disabled={startingJobId === job.jobId}
-                        >
-                            {startingJobId === job.jobId ? (
-                                <ActivityIndicator size="small" color="#fff" />
-                            ) : (
-                                <>
-                                    <Ionicons name="play" size={14} color="#fff" />
-                                    <Text style={st.startBtnText}>{t('dashboard.start')}</Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
+                    {job.overall === 'pending' && (
+                        !job.started ? (
+                            <TouchableOpacity
+                                style={st.startBtn}
+                                onPress={() => handleStartTrip(job)}
+                                activeOpacity={0.7}
+                                disabled={startingJobId === job.jobId}
+                            >
+                                {startingJobId === job.jobId ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <>
+                                        <Ionicons name="play" size={14} color="#fff" />
+                                        <Text style={st.startBtnText}>{t('dashboard.start')}</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        ) : (
+                            <TouchableOpacity
+                                style={[st.startBtn, { backgroundColor: '#EF4444' }]}
+                                onPress={() => handleEndJob(job)}
+                                activeOpacity={0.7}
+                                disabled={endingJobId === job.jobId}
+                            >
+                                {endingJobId === job.jobId ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <>
+                                        <Ionicons name="checkmark-done" size={14} color="#fff" />
+                                        <Text style={st.startBtnText}>{t('dashboard.endJob')}</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        )
                     )}
                     {job.overall === 'pending' && (
                         <TouchableOpacity style={st.jobMapBtn} onPress={() => openJobRoute(job)} activeOpacity={0.7}>
@@ -733,6 +839,8 @@ const DashboardScreen = ({ navigation }: any) => {
 
                 {expanded && (
                     <View style={st.expandedArea}>
+
+
                         {/* Breakdown — job level */}
                         {job.overall === 'pending' && (
                             <TouchableOpacity
@@ -985,6 +1093,15 @@ const st = StyleSheet.create({
         borderRadius: 10, borderWidth: 1, borderColor: '#E5E5EA',
     },
     breakdownLabel: { flex: 1, fontSize: 14, fontWeight: '500', color: '#FF3B30' },
+
+    // End Job button
+    endJobRow: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+        marginHorizontal: 20, marginTop: 12, marginBottom: 4,
+        paddingVertical: 14, paddingHorizontal: 16,
+        borderRadius: 10, backgroundColor: '#34C759',
+    },
+    endJobLabel: { fontSize: 15, fontWeight: '700', color: '#fff' },
 
     // Stop card
     stopCard: {
