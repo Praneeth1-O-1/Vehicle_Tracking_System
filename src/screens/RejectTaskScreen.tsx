@@ -30,8 +30,48 @@ const RejectTaskScreen = ({ navigation, route }: any) => {
     const [submitting, setSubmitting] = useState(false);
     const [audioData, setAudioData] = useState<{ uri: string; durationSecs: number } | null>(null);
 
+    const submitWithData = async (
+        audioUri?: string,
+        durationSecs?: number,
+        predefinedReason?: string,
+        notesText?: string
+    ) => {
+        setSubmitting(true);
+        try {
+            let uploadedMessageId: string | undefined;
+
+            if (audioUri && durationSecs) {
+                const res = await uploadTaskExplanation(
+                    audioUri,
+                    stop.jobId,
+                    stop.index,
+                    durationSecs
+                );
+                uploadedMessageId = res?.DATA?.id;
+            }
+
+            await rejectTask(stop.jobId, stop.index, {
+                predefined_reason: predefinedReason || 'other',
+                text: notesText?.trim() || undefined,
+                audio_message_id: uploadedMessageId,
+            });
+
+            Alert.alert(
+                t('rejectTask.taskRejected'),
+                t('rejectTask.taskRejectedMsg', { name: stop?.name || 'Unknown' }),
+                [{ text: t('common.ok'), onPress: () => navigation.goBack() }]
+            );
+        } catch (err: any) {
+            const msg = err?.response?.data?.error || err.message || 'Failed to reject task.';
+            Alert.alert(t('common.error'), msg);
+            throw err; // rethrow so calling function can handle it
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     const submit = async () => {
-        if (!selected) {
+        if (!selected && !audioData) {
             Alert.alert(t('rejectTask.selectReason'), t('rejectTask.selectReasonMsg'));
             return;
         }
@@ -45,41 +85,19 @@ const RejectTaskScreen = ({ navigation, route }: any) => {
                     text: t('rejectTask.yesReject'),
                     style: 'destructive',
                     onPress: async () => {
-                        setSubmitting(true);
                         try {
-                            let uploadedMessageId: string | undefined;
-
-                            if (audioData) {
-                                const res = await uploadTaskExplanation(
-                                    audioData.uri,
-                                    stop.jobId,
-                                    stop.index,
-                                    audioData.durationSecs
-                                );
-                                uploadedMessageId = res?.DATA?.id;
-                            }
-
-                            await rejectTask(stop.jobId, stop.index, {
-                                predefined_reason: selected || undefined,
-                                text: notes.trim() || undefined,
-                                audio_message_id: uploadedMessageId,
-                            });
-
-                            Alert.alert(
-                                t('rejectTask.taskRejected'),
-                                t('rejectTask.taskRejectedMsg', { name: stop?.name || 'Unknown' }),
-                                [{ text: t('common.ok'), onPress: () => navigation.goBack() }]
-                            );
-                        } catch (err: any) {
-                            const msg = err?.response?.data?.error || err.message || 'Failed to reject task.';
-                            Alert.alert(t('common.error'), msg);
-                        } finally {
-                            setSubmitting(false);
+                            await submitWithData(audioData?.uri, audioData?.durationSecs, selected || undefined, notes);
+                        } catch (e) {
+                            // error is handled inside submitWithData
                         }
                     },
                 },
             ]
         );
+    };
+
+    const handleAudioStop = (uri: string, durationSecs: number) => {
+        setAudioData({ uri, durationSecs });
     };
 
     return (
@@ -160,7 +178,7 @@ const RejectTaskScreen = ({ navigation, route }: any) => {
                     </View>
                 ) : (
                     <AudioRecorder
-                        onRecordingComplete={(uri, durationSecs) => setAudioData({ uri, durationSecs })}
+                        onRecordingStop={handleAudioStop}
                         title={t('rejectTask.recordAReason')}
                         subtitle={t('rejectTask.recordSubtitle')}
                     />
@@ -169,8 +187,8 @@ const RejectTaskScreen = ({ navigation, route }: any) => {
                 <TouchableOpacity
                     activeOpacity={0.8}
                     onPress={submit}
-                    disabled={!selected || submitting}
-                    style={[s.submitBtn, (!selected) && s.submitDisabled, { marginTop: 16 }]}
+                    disabled={(!selected && !audioData) || submitting}
+                    style={[s.submitBtn, (!selected && !audioData) && s.submitDisabled, { marginTop: 16 }]}
                 >
                     {submitting ? (
                         <ActivityIndicator size="small" color="#fff" />

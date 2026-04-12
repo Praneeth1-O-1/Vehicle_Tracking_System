@@ -234,7 +234,7 @@ export const endJob = async (
     latitude: number,
     longitude: number
 ) => {
-    const response = await api.post('/api/jobs/end', {
+    const response = await api.put('/api/jobs/complete-overall', {
         job_id,
         latitude,
         longitude,

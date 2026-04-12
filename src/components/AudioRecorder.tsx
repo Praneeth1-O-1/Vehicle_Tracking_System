@@ -8,7 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from '../i18n/i18n';
 
 interface AudioRecorderProps {
-    onRecordingComplete: (uri: string, durationSecs: number) => void;
+    onRecordingComplete?: (uri: string, durationSecs: number) => void;
+    onRecordingStop?: (uri: string, durationSecs: number) => void;
     onCancel?: () => void;
     maxDurationMs?: number;
     title?: string;
@@ -17,6 +18,7 @@ interface AudioRecorderProps {
 
 const AudioRecorder: React.FC<AudioRecorderProps> = ({
     onRecordingComplete,
+    onRecordingStop,
     onCancel,
     maxDurationMs = 120000,
     title = 'Record Audio',
@@ -137,6 +139,10 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
             setRecordedUri(uri || null);
             setRecordedDuration(Math.max(1, Math.round(durationMs / 1000)));
             recordingRef.current = null;
+            
+            if (uri && onRecordingStop) {
+                onRecordingStop(uri, Math.max(1, Math.round(durationMs / 1000)));
+            }
         } catch (err) {
             console.error('Failed to stop recording:', err);
             setIsRecording(false);
@@ -193,7 +199,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
     };
 
     const handleSend = async () => {
-        if (!recordedUri) return;
+        if (!recordedUri || !onRecordingComplete) return;
         setIsSending(true);
         try {
             await onRecordingComplete(recordedUri, recordedDuration);
@@ -269,20 +275,22 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
                             <Text style={styles.reRecordText}>{t('audioRecorder.reRecord')}</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={styles.sendBtn}
-                            onPress={handleSend}
-                            disabled={isSending}
-                        >
-                            {isSending ? (
-                                <ActivityIndicator size="small" color="#fff" />
-                            ) : (
-                                <>
-                                    <Ionicons name="send" size={16} color="#fff" />
-                                    <Text style={styles.sendText}>{t('audioRecorder.send')}</Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
+                        {onRecordingComplete && (
+                            <TouchableOpacity
+                                style={styles.sendBtn}
+                                onPress={handleSend}
+                                disabled={isSending}
+                            >
+                                {isSending ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <>
+                                        <Ionicons name="send" size={16} color="#fff" />
+                                        <Text style={styles.sendText}>{t('audioRecorder.send')}</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </View>
             )}

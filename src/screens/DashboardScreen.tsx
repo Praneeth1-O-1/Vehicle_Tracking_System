@@ -65,6 +65,7 @@ interface Job {
     totalCount: number;
     createdAt: string;
     updatedAt: string;
+    allStopsDone?: boolean;
 }
 
 const TAB_KEYS: TabKey[] = ['pending', 'all', 'interrupted', 'completed'];
@@ -150,6 +151,8 @@ const parseJobs = (rawJobs: any[]): Job[] => {
         // Do NOT re-sort — preserve route_order sequence from backend
         const completedCount = stops.filter(s => s.status === 'delivered' || s.status === 'picked_up').length;
 
+        const allStopsDone = !!statusObj.all_stops_done;
+
         return {
             jobId: String(job.job_id),
             vehicleId: String(job.vehicle_id || ''),
@@ -160,6 +163,7 @@ const parseJobs = (rawJobs: any[]): Job[] => {
             totalCount: stops.length,
             createdAt: job.created_at || job.assigned_at || '',
             updatedAt: job.updated_at || job.completed_at || '',
+            allStopsDone,
         };
     });
 };
@@ -321,7 +325,8 @@ const DashboardScreen = ({ navigation }: any) => {
             const allDone = newCompleted === j.totalCount;
             return {
                 ...j, stops: updatedStops, completedCount: newCompleted,
-                overall: allDone ? 'completed' as JobOverall : j.overall,
+                allStopsDone: allDone,
+                overall: j.overall,
             };
         }));
     };
@@ -342,7 +347,9 @@ const DashboardScreen = ({ navigation }: any) => {
                 }
             } catch (e) {}
 
-            await updateStopStatus(stop.jobId, stop.index, 'arrived', undefined, latitude, longitude);
+            // Skip backend update as 'arrived' is not an allowed status enum
+            // await updateStopStatus(stop.jobId, stop.index, 'arrived', undefined, latitude, longitude);
+            
             setJobs(prev => prev.map(j => {
                 if (j.jobId !== stop.jobId) return j;
                 const updatedStops = j.stops.map(s =>
@@ -806,21 +813,23 @@ const DashboardScreen = ({ navigation }: any) => {
                                 )}
                             </TouchableOpacity>
                         ) : (
-                            <TouchableOpacity
-                                style={[st.startBtn, { backgroundColor: '#EF4444' }]}
-                                onPress={() => handleEndJob(job)}
-                                activeOpacity={0.7}
-                                disabled={endingJobId === job.jobId}
-                            >
-                                {endingJobId === job.jobId ? (
-                                    <ActivityIndicator size="small" color="#fff" />
-                                ) : (
-                                    <>
-                                        <Ionicons name="checkmark-done" size={14} color="#fff" />
-                                        <Text style={st.startBtnText}>{t('dashboard.endJob')}</Text>
-                                    </>
-                                )}
-                            </TouchableOpacity>
+                            (job.allStopsDone || job.completedCount === job.totalCount) && (
+                                <TouchableOpacity
+                                    style={[st.startBtn, { backgroundColor: '#EF4444' }]}
+                                    onPress={() => handleEndJob(job)}
+                                    activeOpacity={0.7}
+                                    disabled={endingJobId === job.jobId}
+                                >
+                                    {endingJobId === job.jobId ? (
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    ) : (
+                                        <>
+                                            <Ionicons name="checkmark-done" size={14} color="#fff" />
+                                            <Text style={st.startBtnText}>{t('dashboard.endJob')}</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            )
                         )
                     )}
                     {job.overall === 'pending' && (
