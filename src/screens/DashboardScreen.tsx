@@ -74,11 +74,13 @@ const TAB_KEYS: TabKey[] = ['pending', 'all', 'interrupted', 'completed'];
 // Backend getDriverJobs returns buildRouteResponse format:
 // { job_id, vehicle_id, route_order: [ { task_id, customer_id, location, location_name, task, weight, ... } ], status, ... }
 
+const isDone = (s: StopStatus) => s === 'delivered' || s === 'picked_up' || s === 'skipped' || s === 'location_changed_completed' || s === 'rejected';
+
 const parseJobs = (rawJobs: any[]): Job[] => {
     return rawJobs.map(job => {
         const statusObj = job.status || {};
         const stopsStatusMap = statusObj.stops || {};
-        const jobOverall = (statusObj.overall || 'pending') as JobOverall;
+        let jobOverall = (statusObj.overall || 'pending') as JobOverall;
 
         // route_order is an array of task objects from buildRouteResponse
         const routeOrder: any[] = job.route_order || [];
@@ -150,8 +152,10 @@ const parseJobs = (rawJobs: any[]): Job[] => {
 
         // Do NOT re-sort — preserve route_order sequence from backend
         const completedCount = stops.filter(s => s.status === 'delivered' || s.status === 'picked_up').length;
-
-        const allStopsDone = !!statusObj.all_stops_done;
+        
+        // Robustly determine if all stops are done, even if the backend all_stops_done flag is buggy for rejections
+        const allStopsDoneLocal = stops.length > 0 && stops.every(s => isDone(s.status));
+        const allStopsDone = !!statusObj.all_stops_done || allStopsDoneLocal;
 
         return {
             jobId: String(job.job_id),
@@ -168,7 +172,7 @@ const parseJobs = (rawJobs: any[]): Job[] => {
     });
 };
 
-const isDone = (s: StopStatus) => s === 'delivered' || s === 'picked_up' || s === 'skipped' || s === 'location_changed_completed' || s === 'rejected';
+// isDone moved above parseJobs
 
 // jobStatusText is now inside the component to access t()
 
@@ -322,7 +326,7 @@ const DashboardScreen = ({ navigation }: any) => {
                 s.id === stop.id ? { ...s, status: displayStatus } : s
             );
             const newCompleted = updatedStops.filter(s => s.status === 'delivered' || s.status === 'picked_up').length;
-            const allDone = newCompleted === j.totalCount;
+            const allDone = updatedStops.every(s => isDone(s.status));
             return {
                 ...j, stops: updatedStops, completedCount: newCompleted,
                 allStopsDone: allDone,
