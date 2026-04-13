@@ -304,14 +304,36 @@ const DashboardScreen = ({ navigation }: any) => {
     const LATE_THRESHOLD_MS = 1 * 60 * 1000;
 
     const isTaskLate = (stop: Stop): boolean => {
-        if (!stop.eta) return false;
-        try {
-            const eta = new Date(stop.eta);
-            if (isNaN(eta.getTime())) return false;
-            return Date.now() > (eta.getTime() + LATE_THRESHOLD_MS);
-        } catch {
-            return false;
+        const targetTimeStr = stop.timeConstraint || stop.eta;
+        if (!targetTimeStr) return false;
+
+        let targetTimeMs: number | null = null;
+        
+        // 1. Try parsing as a full Date/ISO string
+        const d = new Date(targetTimeStr);
+        if (!isNaN(d.getTime())) {
+            targetTimeMs = d.getTime();
+        } else {
+            // 2. Try parsing as a raw time string like "15:15" or "3:15 PM"
+            const timeRegex = /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?$/;
+            const match = targetTimeStr.match(timeRegex);
+            if (match) {
+                let hours = parseInt(match[1], 10);
+                const mins = parseInt(match[2], 10);
+                const modifier = match[4]?.toUpperCase();
+
+                if (modifier === 'PM' && hours < 12) hours += 12;
+                if (modifier === 'AM' && hours === 12) hours = 0;
+
+                const now = new Date();
+                now.setHours(hours, mins, 0, 0);
+                targetTimeMs = now.getTime();
+            }
         }
+
+        if (targetTimeMs === null) return false;
+        
+        return Date.now() > (targetTimeMs + LATE_THRESHOLD_MS);
     };
 
     const finalizeCompletion = async (stop: Stop, lat: number, lng: number) => {
@@ -351,8 +373,7 @@ const DashboardScreen = ({ navigation }: any) => {
                 }
             } catch (e) {}
 
-            // Skip backend update as 'arrived' is not an allowed status enum
-            // await updateStopStatus(stop.jobId, stop.index, 'arrived', undefined, latitude, longitude);
+            await updateStopStatus(stop.jobId, stop.index, 'arrived', undefined, latitude, longitude);
             
             setJobs(prev => prev.map(j => {
                 if (j.jobId !== stop.jobId) return j;
