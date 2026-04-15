@@ -27,6 +27,7 @@ export const login = async (username: string, password: string) => {
     if (DATA && DATA.token) {
         await SecureStore.setItemAsync('token', DATA.token);
         await SecureStore.setItemAsync('user', JSON.stringify(DATA));
+        await SecureStore.setItemAsync('loginTime', Date.now().toString());
         return DATA;
     } else {
         throw new Error('Invalid response from server');

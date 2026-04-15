@@ -14,7 +14,16 @@
     "resetPassword": "Reset Password",
     "resetPasswordMsg": "Please contact admin to reset credentials.",
     "contactAdminTitle": "Contact Admin",
-    "contactAdminMsg": "Driver accounts are created by fleet managers."
+    "contactAdminMsg": "Driver accounts are created by fleet managers.",
+    "saveCredentials": "Save Credentials?",
+    "saveCredentialsMsg": "Would you like to save your username and password for faster login next time?",
+    "yesSave": "Yes, Save",
+    "noThanks": "No Thanks",
+    "savedCredentials": "Saved Login",
+    "tapToAutofill": "Tap to autofill",
+    "updatePassword": "Update Saved Password?",
+    "updatePasswordMsg": "You logged in with a different password. Would you like to update the saved password?",
+    "yesUpdate": "Yes, Update"
   },
   "dashboard": {
     "hello": "Hello,",

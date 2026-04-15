@@ -14,7 +14,6 @@ import {
     Image,
     Dimensions,
     Modal,
-    FlatList,
 } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 import { login } from '../services/api';
@@ -32,6 +31,7 @@ const LoginScreen = ({ navigation }: any) => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(true);
     const [langDropdownVisible, setLangDropdownVisible] = useState(false);
+    const [savedCreds, setSavedCreds] = useState<{ username: string; password: string } | null>(null);
 
     // Animations
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -40,9 +40,9 @@ const LoginScreen = ({ navigation }: any) => {
     useEffect(() => {
         const checkLogin = async () => {
             const token = await SecureStore.getItemAsync('token');
-            if (token) {
-                navigation.replace('Dashboard');
-            } else {
+            const loginTime = await SecureStore.getItemAsync('loginTime');
+
+            const showLoginForm = () => {
                 setLoading(false);
                 Animated.parallel([
                     Animated.timing(fadeAnim, {
@@ -57,6 +57,34 @@ const LoginScreen = ({ navigation }: any) => {
                         useNativeDriver: true,
                     })
                 ]).start();
+            };
+
+            if (token && loginTime) {
+                const ONE_DAY = 24 * 60 * 60 * 1000;
+                const elapsed = Date.now() - parseInt(loginTime, 10);
+
+                if (elapsed < ONE_DAY) {
+                    // ✅ Session still valid — go to Dashboard
+                    navigation.replace('Dashboard');
+                } else {
+                    // ❌ Session expired — clear credentials and show login
+                    await SecureStore.deleteItemAsync('token');
+                    await SecureStore.deleteItemAsync('loginTime');
+                    await SecureStore.deleteItemAsync('user');
+                    showLoginForm();
+                }
+            } else {
+                // No token stored — show login form
+                showLoginForm();
+            }
+
+            // Auto-fill saved credentials into the form
+            const savedUser = await SecureStore.getItemAsync('savedUsername');
+            const savedPass = await SecureStore.getItemAsync('savedPassword');
+            if (savedUser && savedPass) {
+                setSavedCreds({ username: savedUser, password: savedPass });
+                setUsername(savedUser);
+                setPassword(savedPass);
             }
         };
         checkLogin();
@@ -64,9 +92,60 @@ const LoginScreen = ({ navigation }: any) => {
 
     const loginMutation = useMutation({
         mutationFn: ({ e, p }: { e: string; p: string }) => login(e, p),
-        onSuccess: () => {
+        onSuccess: (_data, variables) => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            navigation.replace('Dashboard');
+
+            // Case 1: Exact match — credentials already saved, go straight
+            if (savedCreds && savedCreds.username === variables.e && savedCreds.password === variables.p) {
+                navigation.replace('Dashboard');
+                return;
+            }
+
+            // Case 2: Same username, different password — ask to update
+            if (savedCreds && savedCreds.username === variables.e && savedCreds.password !== variables.p) {
+                Alert.alert(
+                    t('login.updatePassword'),
+                    t('login.updatePasswordMsg'),
+                    [
+                        {
+                            text: t('login.noThanks'),
+                            style: 'cancel',
+                            onPress: () => navigation.replace('Dashboard'),
+                        },
+                        {
+                            text: t('login.yesUpdate'),
+                            onPress: async () => {
+                                await SecureStore.setItemAsync('savedPassword', variables.p);
+                                navigation.replace('Dashboard');
+                            },
+                        },
+                    ],
+                    { cancelable: false }
+                );
+                return;
+            }
+
+            // Case 3: New user or no saved creds — ask to save
+            Alert.alert(
+                t('login.saveCredentials'),
+                t('login.saveCredentialsMsg'),
+                [
+                    {
+                        text: t('login.noThanks'),
+                        style: 'cancel',
+                        onPress: () => navigation.replace('Dashboard'),
+                    },
+                    {
+                        text: t('login.yesSave'),
+                        onPress: async () => {
+                            await SecureStore.setItemAsync('savedUsername', variables.e);
+                            await SecureStore.setItemAsync('savedPassword', variables.p);
+                            navigation.replace('Dashboard');
+                        },
+                    },
+                ],
+                { cancelable: false }
+            );
         },
         onError: (error: any) => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -82,6 +161,8 @@ const LoginScreen = ({ navigation }: any) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         loginMutation.mutate({ e: username, p: password });
     };
+
+
 
     const handleLanguageSelect = (code: LanguageCode) => {
         setLanguage(code);
@@ -450,6 +531,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     loginBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
+
 });
 
 export default LoginScreen;

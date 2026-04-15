@@ -86,10 +86,6 @@ const parseJobs = (rawJobs: any[]): Job[] => {
         const routeOrder: any[] = job.route_order || [];
 
         const stops: Stop[] = routeOrder.map((task: any, orderIndex: number) => {
-            // Debug: log raw task keys to find phone field
-            if (orderIndex === 0) console.log('[parseJobs] task keys:', Object.keys(task), 'customer_id:', task.customer_id);
-            console.log('FULL TASK:', task);
-
             const taskId = String(task.task_id);
 
             // Stop status from status.stops map
@@ -525,13 +521,11 @@ const DashboardScreen = ({ navigation }: any) => {
     }
 
     const url = `tel:${phone}`;
-    console.log("📞 TRYING:", url);
 
     try {
         // 🔥 DIRECTLY OPEN (skip canOpenURL)
         await Linking.openURL(url);
     } catch (err) {
-        console.log("❌ tel failed, trying telprompt");
 
         try {
             await Linking.openURL(`telprompt:${phone}`);
