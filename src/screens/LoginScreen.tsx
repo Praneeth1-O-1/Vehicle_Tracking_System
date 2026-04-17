@@ -149,7 +149,7 @@ const LoginScreen = ({ navigation }: any) => {
         },
         onError: (error: any) => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            Alert.alert(t('login.loginFailed'), error.response?.data?.MESSAGE || error.message || 'Something went wrong');
+            Alert.alert(t('login.loginFailed'), error.response?.data?.MESSAGE || error.message || t('common.somethingWentWrong'));
         },
     });
 

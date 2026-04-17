@@ -79,7 +79,13 @@
     "assigned": "Assigned",
     "lateTaskTitle": "Late Task — Explanation Required",
     "lateTaskSubtitle": "You are completing task #{{index}} later than scheduled. Please record a brief audio explanation.",
-    "taskDoneAudioDone": "Task completed and audio explanation recorded."
+    "taskDoneAudioDone": "Task completed and audio explanation recorded.",
+    "endJobTitle": "End Job",
+    "endJobConfirmMsg": "Are you sure you want to end Job #{{jobId}}? This will mark the job as completed.",
+    "endJobSuccess": "Job Ended",
+    "endJobSuccessMsg": "Job #{{jobId}} has been marked as completed.",
+    "noContactNumber": "No contact number is available for this stop.",
+    "dialerError": "Unable to open dialer on this device"
   },
   "reason": {
     "cantPickUp": "Can't Pick Up",
@@ -181,7 +187,8 @@
     "error": "Error",
     "ok": "OK",
     "cancel": "Cancel",
-    "delayedArrival": "Delayed Arrival"
+    "delayedArrival": "Delayed Arrival",
+    "somethingWentWrong": "Something went wrong"
   },
   "language": {
     "english": "English",

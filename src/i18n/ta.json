@@ -79,7 +79,13 @@
     "assigned": "ஒதுக்கப்பட்டது",
     "lateTaskTitle": "தாமதம் - விளக்கம் தேவை",
     "lateTaskSubtitle": "பணி #{{index}} தாமதமாக முடிகிறது. சுருக்கமான ஆடியோ விளக்கம் பதிவு செய்யவும்.",
-    "taskDoneAudioDone": "பணி முடிந்தது, ஆடியோ பதிவு செய்யப்பட்டது."
+    "taskDoneAudioDone": "பணி முடிந்தது, ஆடியோ பதிவு செய்யப்பட்டது.",
+    "endJobTitle": "பணியை முடி",
+    "endJobConfirmMsg": "பணி #{{jobId}} ஐ முடிக்க விரும்புகிறீர்களா? இது பணியை நிறைவடைந்ததாகக் குறிக்கும்.",
+    "endJobSuccess": "பணி முடிந்தது",
+    "endJobSuccessMsg": "பணி #{{jobId}} நிறைவடைந்ததாகக் குறிக்கப்பட்டது.",
+    "noContactNumber": "இந்த இடத்திற்கான தொடர்பு எண் இல்லை.",
+    "dialerError": "இந்தச் சாதனத்தில் அழைப்பைத் திறக்க இயலவில்லை"
   },
   "reason": {
     "cantPickUp": "எடுக்க இயலவில்லை",
@@ -181,7 +187,8 @@
     "error": "பிழை",
     "ok": "சரி",
     "cancel": "ரத்து",
-    "delayedArrival": "தாமதமான வருகை"
+    "delayedArrival": "தாமதமான வருகை",
+    "somethingWentWrong": "ஏதோ தவறு ஏற்பட்டது"
   },
   "language": {
     "english": "English",

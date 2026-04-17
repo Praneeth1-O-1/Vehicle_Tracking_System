@@ -379,7 +379,7 @@ const DashboardScreen = ({ navigation }: any) => {
                 return { ...j, stops: updatedStops };
             }));
         } catch (error: any) {
-            const msg = error.response?.data?.error || error.message || 'Failed to arrive.';
+            const msg = error.response?.data?.error || error.message || t('common.somethingWentWrong');
             Alert.alert(t('common.error'), msg);
         } finally {
             setUpdatingId(null);
@@ -422,7 +422,7 @@ const DashboardScreen = ({ navigation }: any) => {
 
                             await finalizeCompletion(stop, latitude, longitude);
                         } catch (error: any) {
-                            const msg = error.response?.data?.error || error.message || 'Failed to complete stop.';
+                            const msg = error.response?.data?.error || error.message || t('common.somethingWentWrong');
                             Alert.alert(t('common.error'), msg);
                         } finally {
                             setUpdatingId(null);
@@ -456,7 +456,7 @@ const DashboardScreen = ({ navigation }: any) => {
             setPendingLocation(null);
             Alert.alert(t('dashboard.done'), t('dashboard.taskDoneAudioDone'));
         } catch (error: any) {
-            const msg = error.response?.data?.error || error.message || 'Failed to submit.';
+            const msg = error.response?.data?.error || error.message || t('common.somethingWentWrong');
             Alert.alert(t('common.error'), msg);
         } finally {
             setUpdatingId(null);
@@ -504,7 +504,7 @@ const DashboardScreen = ({ navigation }: any) => {
     let phone = stop.phone;
 
     if (!phone) {
-        Alert.alert(t('dashboard.noLocation'), 'No contact number is available for this stop.');
+        Alert.alert(t('dashboard.noLocation'), t('dashboard.noContactNumber'));
         return;
     }
 
@@ -530,7 +530,7 @@ const DashboardScreen = ({ navigation }: any) => {
         try {
             await Linking.openURL(`telprompt:${phone}`);
         } catch (err2) {
-            Alert.alert(t('common.error'), 'Unable to open dialer on this device');
+            Alert.alert(t('common.error'), t('dashboard.dialerError'));
         }
     }
 };
@@ -555,8 +555,16 @@ const DashboardScreen = ({ navigation }: any) => {
             
             Alert.alert(t('dashboard.tripStarted'), t('dashboard.tripStartedMsg'));
         } catch (error: any) {
-            const msg = error.response?.data?.error || error.message || 'Failed to start trip. Try again.';
-            Alert.alert(t('common.error'), msg);
+            // Location-related errors from Expo come with English messages — show translated text instead
+            const isLocationError = error.message?.toLowerCase()?.includes('location') || 
+                                     error.code === 'ERR_LOCATION' ||
+                                     error.code === 'E_LOCATION_SETTINGS_UNSATISFIED';
+            if (isLocationError) {
+                Alert.alert(t('dashboard.locationRequired'), t('dashboard.locationRequiredMsg'));
+            } else {
+                const msg = error.response?.data?.error || error.message || t('common.somethingWentWrong');
+                Alert.alert(t('common.error'), msg);
+            }
         } finally {
             setStartingJobId(null);
         }
@@ -566,12 +574,12 @@ const DashboardScreen = ({ navigation }: any) => {
 
     const handleEndJob = (job: Job) => {
         Alert.alert(
-            'End Job',
-            `Are you sure you want to end Job #${job.jobId}? This will mark the job as completed.`,
+            t('dashboard.endJobTitle'),
+            t('dashboard.endJobConfirmMsg', { jobId: job.jobId }),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: t('dashboard.cancel'), style: 'cancel' },
                 {
-                    text: 'End Job',
+                    text: t('dashboard.endJob'),
                     style: 'destructive',
                     onPress: async () => {
                         setEndingJobId(job.jobId);
@@ -590,10 +598,10 @@ const DashboardScreen = ({ navigation }: any) => {
                                     : j
                             ));
                             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                            Alert.alert('Job Ended', `Job #${job.jobId} has been marked as completed.`);
+                            Alert.alert(t('dashboard.endJobSuccess'), t('dashboard.endJobSuccessMsg', { jobId: job.jobId }));
                         } catch (error: any) {
-                            const msg = error.response?.data?.error || error.message || 'Failed to end job. Try again.';
-                            Alert.alert('Error', msg);
+                            const msg = error.response?.data?.error || error.message || t('common.somethingWentWrong');
+                            Alert.alert(t('common.error'), msg);
                         } finally {
                             setEndingJobId(null);
                         }
@@ -645,7 +653,7 @@ const DashboardScreen = ({ navigation }: any) => {
                                 ]
                             );
                         } catch (error: any) {
-                            const msg = error.response?.data?.error || error.message || 'Failed to report breakdown.';
+                            const msg = error.response?.data?.error || error.message || t('common.somethingWentWrong');
                             Alert.alert(t('common.error'), msg);
                         } finally {
                             setBreakdownJobId(null);
