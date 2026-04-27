@@ -83,7 +83,6 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
             const data = await getConversations();
             setConversations(data);
         } catch (err) {
-            console.error('Failed to fetch conversations:', err);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -98,7 +97,6 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
                     const data = await getMessagableUsers();
                     setContacts(data);
                 } catch (err) {
-                    console.error('Failed to fetch contacts:', err);
                 } finally {
                     setLoading(false);
                 }
@@ -116,7 +114,6 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
             const data = await getConversationMessages(partnerId);
             setMessages(data);
         } catch (err) {
-            console.error('Failed to fetch messages:', err);
         } finally {
             setLoading(false);
         }
@@ -129,7 +126,6 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
             const data = await getMessagableUsers();
             setContacts(data);
         } catch (err) {
-            console.error('Failed to fetch contacts:', err);
         } finally {
             setLoading(false);
         }
@@ -188,7 +184,6 @@ const AudioMessagesScreen = ({ navigation, route }: any) => {
                 }
             });
         } catch (err) {
-            console.error('Playback error:', err);
             Alert.alert(t('common.error'), t('audioMessages.errorPlayback'));
             setPlayingId(null);
         }

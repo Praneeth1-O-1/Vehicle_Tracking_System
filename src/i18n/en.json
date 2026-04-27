@@ -9,6 +9,7 @@
     "needAccount": "Need an account? ",
     "contactAdmin": "Contact Admin",
     "loginFailed": "Login Failed",
+    "somethingWentWrong": "Something went wrong. Please try again.",
     "error": "Error",
     "enterCredentials": "Please enter username and password",
     "resetPassword": "Reset Password",
@@ -185,6 +186,7 @@
   },
   "common": {
     "error": "Error",
+    "genericError": "Something went wrong. Please try again.",
     "ok": "OK",
     "cancel": "Cancel",
     "delayedArrival": "Delayed Arrival",

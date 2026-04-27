@@ -108,7 +108,6 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
                 }
             }, 1000);
         } catch (err) {
-            console.error('Failed to start recording:', err);
             // Ensure cleanup if createAsync partially succeeded
             if (recordingRef.current) {
                 try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
@@ -144,7 +143,6 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
                 onRecordingStop(uri, Math.max(1, Math.round(durationMs / 1000)));
             }
         } catch (err) {
-            console.error('Failed to stop recording:', err);
             setIsRecording(false);
             recordingRef.current = null;
         }
@@ -176,7 +174,6 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
                 }
             });
         } catch (err) {
-            console.error('Failed to play recording:', err);
             setIsPlaying(false);
         }
     };

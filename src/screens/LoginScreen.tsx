@@ -23,7 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation, LANGUAGES, LanguageCode } from '../i18n/i18n';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 const LoginScreen = ({ navigation }: any) => {
     const { t, language, setLanguage } = useTranslation();
@@ -149,7 +149,16 @@ const LoginScreen = ({ navigation }: any) => {
         },
         onError: (error: any) => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+<<<<<<< HEAD
             Alert.alert(t('login.loginFailed'), error.response?.data?.MESSAGE || error.message || t('common.somethingWentWrong'));
+=======
+            const status = error.response?.status;
+            const serverMsg = error.response?.data?.MESSAGE;
+            const msg = (status === 401 || status === 400) && serverMsg
+                ? serverMsg
+                : t('login.somethingWentWrong');
+            Alert.alert(t('login.loginFailed'), msg);
+>>>>>>> 466bcce (Security fix)
         },
     });
 

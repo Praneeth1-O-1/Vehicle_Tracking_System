@@ -9,6 +9,7 @@
     "needAccount": "खाता चाहिए? ",
     "contactAdmin": "एडमिन से संपर्क करें",
     "loginFailed": "लॉगिन विफल",
+    "somethingWentWrong": "कुछ गलत हो गया। कृपया पुनः प्रयास करें।",
     "error": "त्रुटि",
     "enterCredentials": "कृपया उपयोगकर्ता नाम और पासवर्ड दर्ज करें",
     "resetPassword": "पासवर्ड रीसेट",
@@ -185,6 +186,7 @@
   },
   "common": {
     "error": "त्रुटि",
+    "genericError": "कुछ गलत हो गया। कृपया पुनः प्रयास करें।",
     "ok": "ठीक",
     "cancel": "रद्द करें",
     "delayedArrival": "विलंबित आगमन",

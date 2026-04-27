@@ -1,13 +1,14 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native'; 
-import Constants from 'expo-constants';
 
-const RAW_URL = process.env.EXPO_PUBLIC_API_URL || 'http://51.20.128.131';
-const API_URL = RAW_URL.replace(/\/$/, '');
+if (!process.env.EXPO_PUBLIC_API_URL) {
+    throw new Error('EXPO_PUBLIC_API_URL is not set. Check your .env file.');
+}
+const API_URL = process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, '');
 
 const api = axios.create({
     baseURL: API_URL,
+    timeout: 30000,
 });
 
 // Add Token to Requests
