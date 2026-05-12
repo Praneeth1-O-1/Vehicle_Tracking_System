@@ -86,7 +86,9 @@
     "endJobSuccess": "Job Ended",
     "endJobSuccessMsg": "Job #{{jobId}} has been marked as completed.",
     "noContactNumber": "No contact number is available for this stop.",
-    "dialerError": "Unable to open dialer on this device"
+    "dialerError": "Unable to open dialer on this device",
+    "tripNotStarted": "Trip Not Started",
+    "tripNotStartedMsg": "Please start the trip first before marking stops as arrived or completed."
   },
   "reason": {
     "cantPickUp": "Can't Pick Up",

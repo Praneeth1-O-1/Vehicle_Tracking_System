@@ -149,16 +149,12 @@ const LoginScreen = ({ navigation }: any) => {
         },
         onError: (error: any) => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-<<<<<<< HEAD
-            Alert.alert(t('login.loginFailed'), error.response?.data?.MESSAGE || error.message || t('common.somethingWentWrong'));
-=======
             const status = error.response?.status;
             const serverMsg = error.response?.data?.MESSAGE;
             const msg = (status === 401 || status === 400) && serverMsg
                 ? serverMsg
                 : t('login.somethingWentWrong');
             Alert.alert(t('login.loginFailed'), msg);
->>>>>>> 466bcce (Security fix)
         },
     });
 

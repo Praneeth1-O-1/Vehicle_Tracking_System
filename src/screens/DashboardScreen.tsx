@@ -353,6 +353,11 @@ const DashboardScreen = ({ navigation }: any) => {
     };
 
     const handleArrive = async (stop: Stop) => {
+        const parentJob = jobs.find(j => j.jobId === stop.jobId);
+        if (!parentJob?.started) {
+            Alert.alert(t('dashboard.tripNotStarted'), t('dashboard.tripNotStartedMsg'));
+            return;
+        }
         setUpdatingId(stop.id);
         try {
             let latitude = 0;
@@ -378,11 +383,7 @@ const DashboardScreen = ({ navigation }: any) => {
                 return { ...j, stops: updatedStops };
             }));
         } catch (error: any) {
-<<<<<<< HEAD
-            const msg = error.response?.data?.error || error.message || t('common.somethingWentWrong');
-=======
             const msg = error.response?.data?.error || t('common.genericError');
->>>>>>> 466bcce (Security fix)
             Alert.alert(t('common.error'), msg);
         } finally {
             setUpdatingId(null);
@@ -390,6 +391,11 @@ const DashboardScreen = ({ navigation }: any) => {
     };
 
     const handleComplete = (stop: Stop) => {
+        const parentJob = jobs.find(j => j.jobId === stop.jobId);
+        if (!parentJob?.started) {
+            Alert.alert(t('dashboard.tripNotStarted'), t('dashboard.tripNotStartedMsg'));
+            return;
+        }
         Alert.alert(
             t('dashboard.confirmCompletion'),
             t('dashboard.confirmCompletionMsg'),
@@ -425,11 +431,7 @@ const DashboardScreen = ({ navigation }: any) => {
 
                             await finalizeCompletion(stop, latitude, longitude);
                         } catch (error: any) {
-<<<<<<< HEAD
-                            const msg = error.response?.data?.error || error.message || t('common.somethingWentWrong');
-=======
                             const msg = error.response?.data?.error || t('common.genericError');
->>>>>>> 466bcce (Security fix)
                             Alert.alert(t('common.error'), msg);
                         } finally {
                             setUpdatingId(null);
@@ -463,11 +465,7 @@ const DashboardScreen = ({ navigation }: any) => {
             setPendingLocation(null);
             Alert.alert(t('dashboard.done'), t('dashboard.taskDoneAudioDone'));
         } catch (error: any) {
-<<<<<<< HEAD
-            const msg = error.response?.data?.error || error.message || t('common.somethingWentWrong');
-=======
             const msg = error.response?.data?.error || t('common.genericError');
->>>>>>> 466bcce (Security fix)
             Alert.alert(t('common.error'), msg);
         } finally {
             setUpdatingId(null);
@@ -566,21 +564,15 @@ const DashboardScreen = ({ navigation }: any) => {
             
             Alert.alert(t('dashboard.tripStarted'), t('dashboard.tripStartedMsg'));
         } catch (error: any) {
-<<<<<<< HEAD
-            // Location-related errors from Expo come with English messages — show translated text instead
-            const isLocationError = error.message?.toLowerCase()?.includes('location') || 
+            const isLocationError = error.message?.toLowerCase()?.includes('location') ||
                                      error.code === 'ERR_LOCATION' ||
                                      error.code === 'E_LOCATION_SETTINGS_UNSATISFIED';
             if (isLocationError) {
                 Alert.alert(t('dashboard.locationRequired'), t('dashboard.locationRequiredMsg'));
             } else {
-                const msg = error.response?.data?.error || error.message || t('common.somethingWentWrong');
+                const msg = error.response?.data?.error || t('common.genericError');
                 Alert.alert(t('common.error'), msg);
             }
-=======
-            const msg = error.response?.data?.error || t('common.genericError');
-            Alert.alert(t('common.error'), msg);
->>>>>>> 466bcce (Security fix)
         } finally {
             setStartingJobId(null);
         }
@@ -616,13 +608,8 @@ const DashboardScreen = ({ navigation }: any) => {
                             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                             Alert.alert(t('dashboard.endJobSuccess'), t('dashboard.endJobSuccessMsg', { jobId: job.jobId }));
                         } catch (error: any) {
-<<<<<<< HEAD
-                            const msg = error.response?.data?.error || error.message || t('common.somethingWentWrong');
-                            Alert.alert(t('common.error'), msg);
-=======
                             const msg = error.response?.data?.error || t('common.genericError');
-                            Alert.alert('Error', msg);
->>>>>>> 466bcce (Security fix)
+                            Alert.alert(t('common.error'), msg);
                         } finally {
                             setEndingJobId(null);
                         }
@@ -674,11 +661,7 @@ const DashboardScreen = ({ navigation }: any) => {
                                 ]
                             );
                         } catch (error: any) {
-<<<<<<< HEAD
-                            const msg = error.response?.data?.error || error.message || t('common.somethingWentWrong');
-=======
                             const msg = error.response?.data?.error || t('common.genericError');
->>>>>>> 466bcce (Security fix)
                             Alert.alert(t('common.error'), msg);
                         } finally {
                             setBreakdownJobId(null);

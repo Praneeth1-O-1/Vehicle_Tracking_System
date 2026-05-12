@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(.\\\\gradlew assembleDebug)",
+      "PowerShell(npm install *)",
+      "PowerShell(npx expo prebuild --platform android)"
+    ]
+  }
+}
