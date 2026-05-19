@@ -20,6 +20,7 @@ import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getDriverJobs, updateStopStatus, reportBreakdown, startTrip, uploadTaskExplanation, addTaskRemark, endJob } from '../services/api';
+import { disconnectSocket } from '../services/socket';
 import AudioRecorder from '../components/AudioRecorder';
 import { useTranslation } from '../i18n/i18n';
 
@@ -240,8 +241,10 @@ const DashboardScreen = ({ navigation }: any) => {
         (async () => {
             const json = await SecureStore.getItemAsync('user');
             if (json) {
-                const u = JSON.parse(json);
-                setUserName(u.username || u.name || 'Driver');
+                try {
+                    const u = JSON.parse(json);
+                    setUserName(u.username || u.name || 'Driver');
+                } catch {}
             }
         })();
     }, []);
@@ -678,8 +681,14 @@ const DashboardScreen = ({ navigation }: any) => {
             {
                 text: t('dashboard.logout'), style: 'destructive',
                 onPress: async () => {
+                    try {
+                        const { default: api } = await import('../services/api');
+                        await api.post('/api/auth/logout');
+                    } catch {}
+                    disconnectSocket();
                     await SecureStore.deleteItemAsync('token');
                     await SecureStore.deleteItemAsync('user');
+                    await SecureStore.deleteItemAsync('loginTime');
                     navigation.replace('Login');
                 },
             },

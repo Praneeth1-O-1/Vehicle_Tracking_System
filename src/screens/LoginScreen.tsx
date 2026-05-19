@@ -31,7 +31,6 @@ const LoginScreen = ({ navigation }: any) => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(true);
     const [langDropdownVisible, setLangDropdownVisible] = useState(false);
-    const [savedCreds, setSavedCreds] = useState<{ username: string; password: string } | null>(null);
 
     // Animations
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -78,13 +77,9 @@ const LoginScreen = ({ navigation }: any) => {
                 showLoginForm();
             }
 
-            // Auto-fill saved credentials into the form
             const savedUser = await SecureStore.getItemAsync('savedUsername');
-            const savedPass = await SecureStore.getItemAsync('savedPassword');
-            if (savedUser && savedPass) {
-                setSavedCreds({ username: savedUser, password: savedPass });
+            if (savedUser) {
                 setUsername(savedUser);
-                setPassword(savedPass);
             }
         };
         checkLogin();
@@ -92,60 +87,10 @@ const LoginScreen = ({ navigation }: any) => {
 
     const loginMutation = useMutation({
         mutationFn: ({ e, p }: { e: string; p: string }) => login(e, p),
-        onSuccess: (_data, variables) => {
+        onSuccess: async (_data, variables) => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-            // Case 1: Exact match — credentials already saved, go straight
-            if (savedCreds && savedCreds.username === variables.e && savedCreds.password === variables.p) {
-                navigation.replace('Dashboard');
-                return;
-            }
-
-            // Case 2: Same username, different password — ask to update
-            if (savedCreds && savedCreds.username === variables.e && savedCreds.password !== variables.p) {
-                Alert.alert(
-                    t('login.updatePassword'),
-                    t('login.updatePasswordMsg'),
-                    [
-                        {
-                            text: t('login.noThanks'),
-                            style: 'cancel',
-                            onPress: () => navigation.replace('Dashboard'),
-                        },
-                        {
-                            text: t('login.yesUpdate'),
-                            onPress: async () => {
-                                await SecureStore.setItemAsync('savedPassword', variables.p);
-                                navigation.replace('Dashboard');
-                            },
-                        },
-                    ],
-                    { cancelable: false }
-                );
-                return;
-            }
-
-            // Case 3: New user or no saved creds — ask to save
-            Alert.alert(
-                t('login.saveCredentials'),
-                t('login.saveCredentialsMsg'),
-                [
-                    {
-                        text: t('login.noThanks'),
-                        style: 'cancel',
-                        onPress: () => navigation.replace('Dashboard'),
-                    },
-                    {
-                        text: t('login.yesSave'),
-                        onPress: async () => {
-                            await SecureStore.setItemAsync('savedUsername', variables.e);
-                            await SecureStore.setItemAsync('savedPassword', variables.p);
-                            navigation.replace('Dashboard');
-                        },
-                    },
-                ],
-                { cancelable: false }
-            );
+            await SecureStore.setItemAsync('savedUsername', variables.e);
+            navigation.replace('Dashboard');
         },
         onError: (error: any) => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -159,12 +104,17 @@ const LoginScreen = ({ navigation }: any) => {
     });
 
     const handleLogin = () => {
-        if (!username || !password) {
+        const trimmedUser = username.trim();
+        if (!trimmedUser || !password) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            return Alert.alert(t('login.error'), t('login.enterCredentials'));
+        }
+        if (trimmedUser.length > 128 || password.length > 128) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             return Alert.alert(t('login.error'), t('login.enterCredentials'));
         }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        loginMutation.mutate({ e: username, p: password });
+        loginMutation.mutate({ e: trimmedUser, p: password });
     };
 
 

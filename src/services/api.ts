@@ -20,6 +20,19 @@ api.interceptors.request.use(async (config) => {
     return config;
 });
 
+// Clear credentials on 401 responses
+api.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+        if (error.response?.status === 401) {
+            await SecureStore.deleteItemAsync('token');
+            await SecureStore.deleteItemAsync('user');
+            await SecureStore.deleteItemAsync('loginTime');
+        }
+        return Promise.reject(error);
+    }
+);
+
 // LOGIN
 export const login = async (username: string, password: string) => {
     const response = await api.post('/api/auth/login', { username, password });
@@ -27,7 +40,8 @@ export const login = async (username: string, password: string) => {
 
     if (DATA && DATA.token) {
         await SecureStore.setItemAsync('token', DATA.token);
-        await SecureStore.setItemAsync('user', JSON.stringify(DATA));
+        const { token: _t, ...safeUser } = DATA;
+        await SecureStore.setItemAsync('user', JSON.stringify(safeUser));
         await SecureStore.setItemAsync('loginTime', Date.now().toString());
         return DATA;
     } else {
@@ -38,12 +52,13 @@ export const login = async (username: string, password: string) => {
 // GET DRIVER'S JOBS
 export const getDriverJobs = async () => {
     const userJson = await SecureStore.getItemAsync('user');
-    const user = userJson ? JSON.parse(userJson) : null;
+    let user = null;
+    try { user = userJson ? JSON.parse(userJson) : null; } catch { user = null; }
     const driverId = user?.user_id;
 
     if (!driverId) return [];
 
-    const response = await api.get(`/api/jobs/driverJobs/${driverId}`);
+    const response = await api.get(`/api/jobs/driverJobs/${encodeURIComponent(driverId)}`);
 
     const jobs = response.data?.DATA;
     return Array.isArray(jobs) ? jobs : [];
@@ -52,7 +67,7 @@ export const getDriverJobs = async () => {
 // GET CUSTOMER PHONE NUMBER
 export const getCustomerPhone = async (customerId: string | number): Promise<string | null> => {
     try {
-        const response = await api.get(`/api/customer/getCustomerById/${customerId}`);
+        const response = await api.get(`/api/customer/getCustomerById/${encodeURIComponent(customerId)}`);
         const customer = response.data?.DATA;
         return customer?.first_number || customer?.second_number || null;
     } catch {
@@ -165,13 +180,13 @@ export const getConversations = async () => {
 
 // GET CONVERSATION MESSAGES WITH A USER
 export const getConversationMessages = async (userId: string | number) => {
-    const response = await api.get(`/api/audio/conversation/${userId}`);
+    const response = await api.get(`/api/audio/conversation/${encodeURIComponent(userId)}`);
     return response.data?.DATA || [];
 };
 
 // GET AUDIO STREAM URL (for playback)
 export const getAudioStreamUrl = (messageId: string | number) => {
-    return `${API_URL}/api/audio/stream/${messageId}`;
+    return `${API_URL}/api/audio/stream/${encodeURIComponent(messageId)}`;
 };
 
 // GET UNREAD MESSAGE COUNT
