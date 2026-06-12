@@ -3,7 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native'; 
 import Constants from 'expo-constants';
 
-const RAW_URL = process.env.EXPO_PUBLIC_API_URL || 'http://51.20.128.131';
+const RAW_URL = process.env.EXPO_PUBLIC_API_URL || '34.226.155.135';
 const API_URL = RAW_URL.replace(/\/$/, '');
 
 const api = axios.create({
