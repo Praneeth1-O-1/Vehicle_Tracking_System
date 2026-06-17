@@ -1,9 +1,9 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native'; 
+import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-const RAW_URL = process.env.EXPO_PUBLIC_API_URL || '34.226.155.135';
+const RAW_URL = process.env.EXPO_PUBLIC_API_URL || '32.236.18.66';
 const API_URL = RAW_URL.replace(/\/$/, '');
 
 const api = axios.create({
