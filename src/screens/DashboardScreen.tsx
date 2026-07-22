@@ -20,6 +20,8 @@ import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getDriverJobs, updateStopStatus, reportBreakdown, startTrip, uploadTaskExplanation, rejectTask, addTaskRemark, endJob } from '../services/api';
+import { connectSocket, disconnectSocket } from '../services/socket';
+import { initLocationStreamer, teardownLocationStreamer } from '../services/locationStreamer';
 import AudioRecorder from '../components/AudioRecorder';
 import { useTranslation } from '../i18n/i18n';
 
@@ -244,6 +246,17 @@ const DashboardScreen = ({ navigation }: any) => {
                 setUserName(u.username || u.name || 'Driver');
             }
         })();
+    }, []);
+
+    // Connect the realtime socket and register the mobile-GPS fallback streamer.
+    // The backend requests phone GPS over this socket when the vehicle's MQTT
+    // telemetry drops out during an active job.
+    useEffect(() => {
+        connectSocket();
+        initLocationStreamer();
+        return () => {
+            teardownLocationStreamer();
+        };
     }, []);
 
     const fetchJobs = useCallback(async () => {
@@ -670,6 +683,8 @@ const DashboardScreen = ({ navigation }: any) => {
             {
                 text: t('dashboard.logout'), style: 'destructive',
                 onPress: async () => {
+                    teardownLocationStreamer();
+                    disconnectSocket();
                     await SecureStore.deleteItemAsync('token');
                     await SecureStore.deleteItemAsync('user');
                     navigation.replace('Login');
