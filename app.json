@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "Navix",
+    "name": "Circor",
     "slug": "navix-fleet",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/circor-logo-3.png",
+    "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -22,7 +22,7 @@
     "android": {
       "package": "com.circor.fleet",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/circor-logo-3.png",
+        "foregroundImage": "./assets/app-adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
