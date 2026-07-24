@@ -29,6 +29,17 @@ TaskManager.defineTask(LOCATION_TASK, ({ data, error }) => {
     const loc = locations?.[locations.length - 1];
     if (!loc) return;
 
+    // The native foreground service keeps firing this callback while backgrounded,
+    // but Socket.IO's own auto-reconnect runs on JS setTimeout timers that Android
+    // freezes in the background — so after an internet blackout the socket stays
+    // dead until the app is foregrounded. Drive reconnection from here instead:
+    // this callback runs on the native location event, so it wakes even in the
+    // background. socket.auth was set when streaming started, so connect() reuses
+    // it; the emit below buffers while connecting and flushes on reconnect.
+    if (socket.disconnected) {
+        socket.connect();
+    }
+
     const speedMs = loc.coords.speed;
     const headingDeg = loc.coords.heading;
     socket.emit('mobile_location', {
