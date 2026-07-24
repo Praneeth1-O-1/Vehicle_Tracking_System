@@ -3,62 +3,79 @@
  *
  * Fallback GPS streaming from the driver's phone. When the vehicle's hardware
  * telemetry (MQTT) goes silent during an active job, the backend emits
- * `start_location_stream` to this driver; we begin watching the phone's GPS and
- * emit `mobile_location` fixes until the backend emits `stop_location_stream`
- * (i.e. real vehicle telemetry has resumed).
+ * `start_location_stream` to this driver; we begin watching the phone's GPS —
+ * including while the app is backgrounded, via an Android foreground service —
+ * and emit `mobile_location` fixes every UPDATE_INTERVAL_MS until the backend
+ * emits `stop_location_stream` (i.e. real vehicle telemetry has resumed).
  */
 
 import * as Location from 'expo-location';
+import * as TaskManager from 'expo-task-manager';
 import { socket } from './socket';
 
-let watcher: Location.LocationSubscription | null = null;
+const LOCATION_TASK = 'navix-background-location';
+const UPDATE_INTERVAL_MS = 3000;
+
 let active = false;
 let currentJob: { job_id: string | number; vehicle_id: string | number } | null = null;
 let registered = false;
 
-const stopWatching = () => {
-    if (watcher) {
-        watcher.remove();
-        watcher = null;
-    }
+// Must be defined at module scope (not inside a component) so Expo can invoke
+// it even when the app is backgrounded and this is the only JS running.
+TaskManager.defineTask(LOCATION_TASK, ({ data, error }) => {
+    if (error || !active || !currentJob) return;
+
+    const { locations } = (data as { locations: Location.LocationObject[] }) ?? { locations: [] };
+    const loc = locations?.[locations.length - 1];
+    if (!loc) return;
+
+    const speedMs = loc.coords.speed;
+    const headingDeg = loc.coords.heading;
+    socket.emit('mobile_location', {
+        job_id: currentJob.job_id,
+        vehicle_id: currentJob.vehicle_id,
+        lat: loc.coords.latitude,
+        lon: loc.coords.longitude,
+        // expo reports speed in m/s; backend/MQTT semantics are km/h
+        spd: speedMs != null && speedMs >= 0 ? speedMs * 3.6 : 0,
+        head: headingDeg != null && headingDeg >= 0 ? headingDeg : -1,
+        ts: Math.floor(Date.now() / 1000),
+    });
+});
+
+const stopWatching = async () => {
     active = false;
     currentJob = null;
+    const started = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK).catch(() => false);
+    if (started) {
+        await Location.stopLocationUpdatesAsync(LOCATION_TASK).catch(() => {});
+    }
 };
 
 const startWatching = async (payload: { job_id: string | number; vehicle_id: string | number }) => {
     if (active) return; // already streaming
-    active = true;
     currentJob = payload;
 
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-        active = false;
+    const fg = await Location.requestForegroundPermissionsAsync();
+    if (fg.status !== 'granted') {
         currentJob = null;
         return;
     }
+    // Background permission must be requested after foreground is granted.
+    // If the driver declines it, updates simply stop once the app backgrounds.
+    await Location.requestBackgroundPermissionsAsync();
 
-    watcher = await Location.watchPositionAsync(
-        {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 5000,
-            distanceInterval: 10,
+    active = true;
+    await Location.startLocationUpdatesAsync(LOCATION_TASK, {
+        accuracy: Location.Accuracy.High,
+        timeInterval: UPDATE_INTERVAL_MS,
+        distanceInterval: 0,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+            notificationTitle: 'Navix is tracking this trip',
+            notificationBody: 'Sharing your location while vehicle telemetry is unavailable.',
         },
-        (loc) => {
-            if (!active || !currentJob) return;
-            const speedMs = loc.coords.speed;
-            const headingDeg = loc.coords.heading;
-            socket.emit('mobile_location', {
-                job_id: currentJob.job_id,
-                vehicle_id: currentJob.vehicle_id,
-                lat: loc.coords.latitude,
-                lon: loc.coords.longitude,
-                // expo reports speed in m/s; backend/MQTT semantics are km/h
-                spd: speedMs != null && speedMs >= 0 ? speedMs * 3.6 : 0,
-                head: headingDeg != null && headingDeg >= 0 ? headingDeg : -1,
-                ts: Math.floor(Date.now() / 1000),
-            });
-        }
-    );
+    });
 };
 
 /**
