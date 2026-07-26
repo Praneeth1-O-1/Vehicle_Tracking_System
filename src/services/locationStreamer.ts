@@ -5,15 +5,16 @@
  * telemetry (MQTT) goes silent during an active job, the backend emits
  * `start_location_stream` to this driver; we begin watching the phone's GPS —
  * including while the app is backgrounded, via an Android foreground service —
- * and emit `mobile_location` fixes every UPDATE_INTERVAL_MS until the backend
+ * and POST fixes (via locationQueue) every UPDATE_INTERVAL_MS until the backend
  * emits `stop_location_stream` (i.e. real vehicle telemetry has resumed).
  */
 
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { socket } from './socket';
+import { enqueueFix, flushQueue, clearQueue } from './locationQueue';
 
-const LOCATION_TASK = 'navix-background-location';
+const LOCATION_TASK = 'circor-background-location';
 const UPDATE_INTERVAL_MS = 3000;
 
 let active = false;
@@ -22,27 +23,23 @@ let registered = false;
 
 // Must be defined at module scope (not inside a component) so Expo can invoke
 // it even when the app is backgrounded and this is the only JS running.
-TaskManager.defineTask(LOCATION_TASK, ({ data, error }) => {
+TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
     if (error || !active || !currentJob) return;
 
     const { locations } = (data as { locations: Location.LocationObject[] }) ?? { locations: [] };
     const loc = locations?.[locations.length - 1];
     if (!loc) return;
 
-    // The native foreground service keeps firing this callback while backgrounded,
-    // but Socket.IO's own auto-reconnect runs on JS setTimeout timers that Android
-    // freezes in the background — so after an internet blackout the socket stays
-    // dead until the app is foregrounded. Drive reconnection from here instead:
-    // this callback runs on the native location event, so it wakes even in the
-    // background. socket.auth was set when streaming started, so connect() reuses
-    // it; the emit below buffers while connecting and flushes on reconnect.
-    if (socket.disconnected) {
-        socket.connect();
-    }
-
+    // Delivery is over HTTP, not the socket. Socket.IO's reconnect/heartbeat run
+    // on JS timers that Android freezes in the background, so after a network
+    // blackout the socket stays a zombie until the app is foregrounded — which is
+    // exactly the bug this replaces. A one-shot POST has no such timers: we persist
+    // every fix and flush on each tick, so a reconnect is picked up on the very
+    // next GPS event with no foregrounding. (The socket stays connected only for
+    // receiving start/stop_location_stream control messages.)
     const speedMs = loc.coords.speed;
     const headingDeg = loc.coords.heading;
-    socket.emit('mobile_location', {
+    await enqueueFix({
         job_id: currentJob.job_id,
         vehicle_id: currentJob.vehicle_id,
         lat: loc.coords.latitude,
@@ -52,6 +49,8 @@ TaskManager.defineTask(LOCATION_TASK, ({ data, error }) => {
         head: headingDeg != null && headingDeg >= 0 ? headingDeg : -1,
         ts: Math.floor(Date.now() / 1000),
     });
+    // Fire-and-forget; internally guarded against overlapping flushes.
+    flushQueue();
 });
 
 const stopWatching = async () => {
@@ -61,11 +60,18 @@ const stopWatching = async () => {
     if (started) {
         await Location.stopLocationUpdatesAsync(LOCATION_TASK).catch(() => {});
     }
+    // Best-effort delivery of the last buffered fixes before the monitor closes.
+    flushQueue();
 };
 
 const startWatching = async (payload: { job_id: string | number; vehicle_id: string | number }) => {
     if (active) return; // already streaming
     currentJob = payload;
+
+    // Drop any fixes left over from a previous session. The backend attributes a
+    // fix to the driver's CURRENT monitored vehicle, so replaying stale breadcrumbs
+    // into a new job would write wrong positions.
+    await clearQueue();
 
     const fg = await Location.requestForegroundPermissionsAsync();
     if (fg.status !== 'granted') {
@@ -83,7 +89,7 @@ const startWatching = async (payload: { job_id: string | number; vehicle_id: str
         distanceInterval: 0,
         showsBackgroundLocationIndicator: true,
         foregroundService: {
-            notificationTitle: 'Navix is tracking this trip',
+            notificationTitle: 'Circor is tracking this trip',
             notificationBody: 'Sharing your location while vehicle telemetry is unavailable.',
         },
     });

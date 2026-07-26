@@ -1,0 +1,103 @@
+/**
+ * locationQueue.ts
+ *
+ * Persistent, offline-first delivery queue for background GPS fixes.
+ *
+ * Why this exists: Socket.IO's reconnect/heartbeat run on JS timers that Android
+ * freezes while the app is backgrounded, so after a network blackout the socket
+ * stays a zombie until the app is foregrounded. A one-shot HTTP POST has no such
+ * timers — it either succeeds or fails immediately. We enqueue every fix to
+ * AsyncStorage (so it survives the JS context being killed) and flush on each GPS
+ * tick; a network reconnect is therefore picked up on the very next fix, with no
+ * foregrounding required.
+ */
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from './api';
+
+export interface LocationFix {
+    job_id: string | number;
+    vehicle_id: string | number;
+    lat: number;
+    lon: number;
+    spd: number;
+    head: number;
+    ts: number;
+}
+
+const QUEUE_KEY = 'circor.mobileLocationQueue';
+// ~30 min of breadcrumbs at a 3s cadence. Beyond this we drop the OLDEST fixes:
+// stale positions are worthless, and an unbounded queue would grow forever if the
+// backend were unreachable for a long time.
+const MAX_QUEUE = 600;
+// Fixes per POST. Keeps each request small so a flush after a long outage drains
+// in bounded chunks instead of one huge payload.
+const MAX_BATCH = 100;
+
+// Prevents overlapping flushes (the task fires every few seconds). Module-scope
+// is fine: the background task and the queue share one JS context.
+let flushing = false;
+
+const readQueue = async (): Promise<LocationFix[]> => {
+    try {
+        const raw = await AsyncStorage.getItem(QUEUE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
+
+const writeQueue = async (queue: LocationFix[]): Promise<void> => {
+    try {
+        await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+    } catch {
+        // Storage failure is non-fatal — we simply lose this persistence attempt.
+    }
+};
+
+/** Append one fix, trimming the oldest if we exceed the retention cap. */
+export const enqueueFix = async (fix: LocationFix): Promise<void> => {
+    const queue = await readQueue();
+    queue.push(fix);
+    const trimmed = queue.length > MAX_QUEUE ? queue.slice(queue.length - MAX_QUEUE) : queue;
+    await writeQueue(trimmed);
+};
+
+/**
+ * Send queued fixes oldest-first in batches. Stops on the first failed POST and
+ * leaves the queue intact so the next GPS tick retries. Safe to call fire-and-
+ * forget on every tick — concurrent calls are coalesced by the `flushing` guard.
+ */
+export const flushQueue = async (): Promise<void> => {
+    if (flushing) return;
+    flushing = true;
+    try {
+        // Loop so a backlog drains across multiple batches in a single flush.
+        for (;;) {
+            const queue = await readQueue();
+            if (queue.length === 0) break;
+
+            const batch = queue.slice(0, MAX_BATCH);
+            try {
+                await api.post('/api/driver/mobile-location', { fixes: batch });
+            } catch {
+                // Network/server unreachable — keep everything, retry next tick.
+                break;
+            }
+
+            // Re-read before trimming: new fixes may have been appended (at the
+            // end) while the POST was in flight. Dropping the first batch.length
+            // removes exactly what we sent and preserves those new fixes.
+            const after = await readQueue();
+            await writeQueue(after.slice(batch.length));
+        }
+    } finally {
+        flushing = false;
+    }
+};
+
+/** Drop everything (e.g. on logout). */
+export const clearQueue = async (): Promise<void> => {
+    await writeQueue([]);
+};

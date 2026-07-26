@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Circor",
-    "slug": "navix-fleet",
+    "slug": "circor-fleet",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
@@ -44,7 +44,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Navix needs your location in the background to keep tracking this trip when the app is minimized.",
+          "locationAlwaysAndWhenInUsePermission": "Circor needs your location in the background to keep tracking this trip when the app is minimized.",
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
