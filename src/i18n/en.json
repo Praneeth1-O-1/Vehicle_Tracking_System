@@ -194,5 +194,19 @@
     "english": "English",
     "tamil": "தமிழ்",
     "hindi": "हिन्दी"
+  },
+  "permissions": {
+    "title": "Keep this trip tracked",
+    "body": "Dispatch must keep seeing this trip while your phone is locked, asleep, or in your pocket. Two settings make that possible.",
+    "bodyForegroundOnly": "Location is only allowed while the app is open, so tracking stops the moment your phone locks. Two settings fix that.",
+    "stepLocation": "Location: Allow all the time",
+    "stepLocationDetail": "\"While using the app\" is not enough — tracking stops as soon as the screen turns off.",
+    "stepBattery": "Unrestricted background activity",
+    "stepBatteryDetail": "Without this, Android suspends the app once the phone has been asleep for a while and the trip goes dark.",
+    "allowBackground": "Allow background activity",
+    "androidHint": "Some phones (Xiaomi, Oppo, Vivo, Samsung) also need Circor added to Autostart or set to \"No restrictions\" in battery settings.",
+    "enable": "Enable location",
+    "openSettings": "Open settings",
+    "later": "Later"
   }
 }

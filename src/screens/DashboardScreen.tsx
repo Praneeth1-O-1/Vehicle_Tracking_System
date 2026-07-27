@@ -21,8 +21,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getDriverJobs, updateStopStatus, reportBreakdown, startTrip, uploadTaskExplanation, rejectTask, addTaskRemark, endJob } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
-import { initLocationStreamer, teardownLocationStreamer } from '../services/locationStreamer';
+import { initLocationStreamer, teardownLocationStreamer, startTracking, stopTracking } from '../services/locationStreamer';
 import AudioRecorder from '../components/AudioRecorder';
+import LocationPermissionGate from '../components/LocationPermissionGate';
 import { useTranslation } from '../i18n/i18n';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -226,6 +227,9 @@ const DashboardScreen = ({ navigation }: any) => {
 
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loadingJobs, setLoadingJobs] = useState(true);
+    // True once a fetch has actually succeeded — distinguishes "no active job"
+    // from "we don't know yet". Drives whether tracking may be stopped.
+    const [jobsLoaded, setJobsLoaded] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [activeTab, setActiveTab] = useState<TabKey>('pending');
     const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
@@ -248,9 +252,10 @@ const DashboardScreen = ({ navigation }: any) => {
         })();
     }, []);
 
-    // Connect the realtime socket and register the mobile-GPS fallback streamer.
-    // The backend requests phone GPS over this socket when the vehicle's MQTT
-    // telemetry drops out during an active job.
+    // Connect the realtime socket and register the mobile-GPS streamer's socket
+    // listeners. Those listeners only fast-path the reporting cadence — tracking
+    // itself is started below from the job list, because a sleeping phone cannot
+    // receive socket events (see locationStreamer.ts).
     useEffect(() => {
         connectSocket();
         initLocationStreamer();
@@ -259,11 +264,38 @@ const DashboardScreen = ({ navigation }: any) => {
         };
     }, []);
 
+    // The job the phone should be reporting for: one the driver has started and
+    // that is still running.
+    const activeJob = jobs.find(j => j.started && j.overall === 'pending') || null;
+    const activeJobId = activeJob?.jobId ?? null;
+    const activeVehicleId = activeJob?.vehicleId ?? null;
+
+    // Keep background tracking in step with that job. Runs on every job refresh,
+    // and again when the permission gate reports a grant — startTracking is
+    // idempotent, so repeat calls for the same job are free.
+    // vehicle_id is passed for traceability only — the backend resolves the
+    // vehicle from the driver's monitor and never trusts the client's value — so
+    // a job missing it must still be tracked.
+    const syncTracking = useCallback(() => {
+        if (activeJobId) {
+            startTracking({ job_id: activeJobId, vehicle_id: activeVehicleId || '' }).catch(() => { });
+        } else if (jobsLoaded) {
+            // Only ever stop on a job list we actually fetched. On a cold start
+            // `jobs` is empty, and a service that survived the app restart is
+            // still legitimately tracking — tearing it down here would drop the
+            // stream on every app open, and again on any failed refresh.
+            stopTracking().catch(() => { });
+        }
+    }, [activeJobId, activeVehicleId, jobsLoaded]);
+
+    useEffect(() => { syncTracking(); }, [syncTracking]);
+
     const fetchJobs = useCallback(async () => {
         try {
             const raw = await getDriverJobs();
             const parsed = parseJobs(raw);
             setJobs(parsed);
+            setJobsLoaded(true);
 
             // Auto-expand the first active job
             if (!expandedJobId) {
@@ -924,6 +956,10 @@ const DashboardScreen = ({ navigation }: any) => {
     return (
         <SafeAreaView style={st.container}>
             <StatusBar barStyle="dark-content" />
+
+            {/* Always-on location permission — prompts on every dashboard entry
+                until "Allow all the time" is granted. */}
+            <LocationPermissionGate onGranted={syncTracking} />
 
             {/* Late Task Audio Modal */}
             <Modal

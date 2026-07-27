@@ -25,6 +25,18 @@ export interface LocationFix {
     ts: number;
 }
 
+/**
+ * What the backend told us on the last successful POST.
+ *
+ * `streaming` is the authoritative cadence signal: true means the backend has
+ * declared this driver's vehicle telemetry stale and is now persisting our fixes.
+ * It arrives on the HTTP response precisely because the socket cannot deliver it
+ * to a dozing phone — see locationStreamer.ts.
+ */
+export interface ServerState {
+    streaming: boolean;
+}
+
 const QUEUE_KEY = 'circor.mobileLocationQueue';
 // ~30 min of breadcrumbs at a 3s cadence. Beyond this we drop the OLDEST fixes:
 // stale positions are worthless, and an unbounded queue would grow forever if the
@@ -68,10 +80,14 @@ export const enqueueFix = async (fix: LocationFix): Promise<void> => {
  * Send queued fixes oldest-first in batches. Stops on the first failed POST and
  * leaves the queue intact so the next GPS tick retries. Safe to call fire-and-
  * forget on every tick — concurrent calls are coalesced by the `flushing` guard.
+ *
+ * Resolves with the backend's monitor state from the last successful POST, or
+ * null if nothing was delivered (queue empty, coalesced call, or network down).
  */
-export const flushQueue = async (): Promise<void> => {
-    if (flushing) return;
+export const flushQueue = async (): Promise<ServerState | null> => {
+    if (flushing) return null;
     flushing = true;
+    let serverState: ServerState | null = null;
     try {
         // Loop so a backlog drains across multiple batches in a single flush.
         for (;;) {
@@ -80,7 +96,8 @@ export const flushQueue = async (): Promise<void> => {
 
             const batch = queue.slice(0, MAX_BATCH);
             try {
-                await api.post('/api/driver/mobile-location', { fixes: batch });
+                const res = await api.post('/api/driver/mobile-location', { fixes: batch });
+                serverState = { streaming: Boolean(res?.data?.streaming) };
             } catch {
                 // Network/server unreachable — keep everything, retry next tick.
                 break;
@@ -95,6 +112,7 @@ export const flushQueue = async (): Promise<void> => {
     } finally {
         flushing = false;
     }
+    return serverState;
 };
 
 /** Drop everything (e.g. on logout). */
