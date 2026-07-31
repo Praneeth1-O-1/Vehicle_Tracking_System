@@ -96,15 +96,43 @@ let registered = false;
 let lastFlushMs = 0;
 let streaming = false;
 
-const readTrackedJob = async (): Promise<TrackedJob | null> => {
+/**
+ * Reading the tracked job has three outcomes, and they must not be collapsed:
+ * a genuine "no job" means shut the service down, whereas a storage read that
+ * simply failed means try again later. Returning null for both let one transient
+ * AsyncStorage error tear down the foreground service permanently, mid-trip,
+ * with nothing left running to restart it.
+ */
+type TrackedJobRead =
+    | { status: 'ok'; job: TrackedJob }
+    | { status: 'none' }
+    | { status: 'error' };
+
+const readTrackedJobResult = async (): Promise<TrackedJobRead> => {
+    let raw: string | null;
     try {
-        const raw = await AsyncStorage.getItem(ACTIVE_JOB_KEY);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        return parsed?.job_id != null && parsed?.vehicle_id != null ? parsed : null;
+        raw = await AsyncStorage.getItem(ACTIVE_JOB_KEY);
     } catch {
-        return null;
+        return { status: 'error' };
     }
+
+    if (!raw) return { status: 'none' };
+
+    try {
+        const parsed = JSON.parse(raw);
+        if (parsed?.job_id != null && parsed?.vehicle_id != null) {
+            return { status: 'ok', job: parsed };
+        }
+    } catch {
+        // Corrupt value — genuinely unusable, not a transient failure.
+        return { status: 'none' };
+    }
+    return { status: 'none' };
+};
+
+const readTrackedJob = async (): Promise<TrackedJob | null> => {
+    const res = await readTrackedJobResult();
+    return res.status === 'ok' ? res.job : null;
 };
 
 const writeTrackedJob = async (job: TrackedJob | null): Promise<void> => {
@@ -132,14 +160,20 @@ const isTaskRunning = async (): Promise<boolean> => {
 TaskManager.defineTask(LOCATION_TASK, async ({ data, error }) => {
     if (error) return;
 
-    const job = await readTrackedJob();
-    if (!job) {
+    const read = await readTrackedJobResult();
+    if (read.status === 'error') {
+        // Storage hiccup, not a finished job. Skip this tick and keep the service
+        // alive — stopping here would end the trip's tracking for good.
+        return;
+    }
+    if (read.status === 'none') {
         // Nothing to report for — e.g. the context was rebuilt after logout, or
         // the service outlived the job. Shut the service down rather than burn
         // battery on fixes nobody will accept.
         await Location.stopLocationUpdatesAsync(LOCATION_TASK).catch(() => { });
         return;
     }
+    const job = read.job;
 
     const { locations } = (data as { locations: Location.LocationObject[] }) ?? { locations: [] };
     const loc = locations?.[locations.length - 1];
@@ -301,11 +335,69 @@ const registerControlListeners = () => {
     });
 
     socket.on('stop_location_stream', () => {
-        streaming = false;
-        // Deliver whatever is still buffered, then go quiet — from here the task
-        // only wakes for the occasional safety probe until told to resume.
-        flushQueue().catch(() => { });
+        // Deliver what is still buffered BEFORE going quiet. Those fixes were
+        // taken while the vehicle was genuinely dark, so they belong to the hole
+        // the fallback just covered — the backend admits them on their own
+        // timestamps, but only if we actually send them.
+        flushQueue()
+            .catch(() => { })
+            .then(() => { streaming = false; });
     });
+};
+
+/* ── Watchdog ─────────────────────────────────────────────────────────────────
+ *
+ * startTracking can fail for reasons that are entirely recoverable later —
+ * the app was backgrounded when the job appeared (expo-location refuses to
+ * start its foreground service from the background), or "Allow all the time"
+ * had not been granted yet. It reported that by returning false, which every
+ * caller discarded, and nothing ever asked again: one failed start meant a
+ * whole trip with no phone GPS.
+ *
+ * Android also kills foreground services on its own — OEM battery managers,
+ * low memory, a swipe-away on some ROMs. The service is not something we can
+ * start once and assume; it has to be checked.
+ *
+ * So: re-assert on every foreground, and on a timer while the app is alive.
+ */
+const WATCHDOG_INTERVAL_MS = 60000;
+
+let watchdogId: ReturnType<typeof setInterval> | null = null;
+let appStateSub: { remove: () => void } | null = null;
+
+/** Restart the location service if a job is tracked but nothing is running. */
+const reassertTracking = async (): Promise<void> => {
+    try {
+        const job = await readTrackedJob();
+        if (!job) return;
+        if (await isTaskRunning()) return;
+        await startTracking(job);
+    } catch {
+        // Never let the watchdog throw into a timer or an AppState callback.
+    }
+};
+
+const startWatchdog = () => {
+    if (!watchdogId) {
+        watchdogId = setInterval(() => { reassertTracking(); }, WATCHDOG_INTERVAL_MS);
+    }
+    if (!appStateSub) {
+        appStateSub = AppState.addEventListener('change', (next) => {
+            // The one moment a start that failed while backgrounded can succeed.
+            if (next === 'active') reassertTracking();
+        });
+    }
+};
+
+const stopWatchdog = () => {
+    if (watchdogId) {
+        clearInterval(watchdogId);
+        watchdogId = null;
+    }
+    if (appStateSub) {
+        appStateSub.remove();
+        appStateSub = null;
+    }
 };
 
 registerControlListeners();
@@ -316,12 +408,17 @@ registerControlListeners();
  */
 export const initLocationStreamer = () => {
     registerControlListeners();
+    startWatchdog();
+    // Catch a service that died while the app was away, without waiting a full
+    // watchdog interval.
+    reassertTracking();
 };
 
 /** Remove listeners and stop tracking (call on logout). */
 export const teardownLocationStreamer = () => {
     socket.off('start_location_stream');
     socket.off('stop_location_stream');
+    stopWatchdog();
     stopTracking();
     registered = false;
 };

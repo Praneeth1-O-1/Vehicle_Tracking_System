@@ -37,6 +37,12 @@ export interface ServerState {
     streaming: boolean;
 }
 
+/** Per-batch delivery outcome, distinct from the monitor state above. */
+interface BatchResult {
+    /** The server could not store these; keep them and retry on the next tick. */
+    retry: boolean;
+}
+
 const QUEUE_KEY = 'circor.mobileLocationQueue';
 // ~30 min of breadcrumbs at a 3s cadence. Beyond this we drop the OLDEST fixes:
 // stale positions are worthless, and an unbounded queue would grow forever if the
@@ -95,13 +101,23 @@ export const flushQueue = async (): Promise<ServerState | null> => {
             if (queue.length === 0) break;
 
             const batch = queue.slice(0, MAX_BATCH);
+            let result: BatchResult;
             try {
                 const res = await api.post('/api/driver/mobile-location', { fixes: batch });
                 serverState = { streaming: Boolean(res?.data?.streaming) };
+                result = { retry: Boolean(res?.data?.retry) };
             } catch {
                 // Network/server unreachable — keep everything, retry next tick.
                 break;
             }
+
+            // A 200 does not by itself mean the fixes were stored. When the server
+            // reports it failed on its side (DB/Redis down), deleting the batch
+            // here would destroy the only copy — hold it and let the next tick
+            // retry. Fixes the server deliberately discarded (already covered by
+            // MQTT, or no active job) are not retried: resending them would loop
+            // forever on data it will never accept.
+            if (result.retry) break;
 
             // Re-read before trimming: new fixes may have been appended (at the
             // end) while the POST was in flight. Dropping the first batch.length
